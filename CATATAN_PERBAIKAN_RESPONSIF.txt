@@ -1,0 +1,14 @@
+PANRITA FALAK — PERBAIKAN KAMERA TEODOLIT DAN KALKULATOR
+
+Perubahan khusus pada versi ini:
+1. Area pratinjau kamera Teodolit Falak dibuat lebih ringkas dan responsif untuk layar Android agar tampilan kamera tidak mendominasi layar atau membuat pengguna harus menggulir terlalu jauh.
+2. Penanda bidik tetap berada di tengah pratinjau kamera; video menggunakan object-fit: cover dan kontrol kamera menyesuaikan lebar layar.
+3. Tab Detail Perhitungan diubah menjadi tata letak responsif agar tombol rumus tidak terpotong di HP.
+4. Panel rumus, nilai yang diketahui, substitusi, hasil akhir, dan tabel dibuat lebih tahan terhadap teks panjang dan layar sempit.
+5. Perhitungan sudut tinggi Matahari untuk Asar pada kalkulator koordinat sekarang mengikuti faktor Asar yang dipilih (Syafi'i atau Hanafi), bukan selalu memakai faktor 1.
+6. Perkiraan zona waktu dari bujur pada pemilihan lokasi diperbaiki ambang WITA/WIT-nya.
+
+PENTING:
+- Kamera HP hanya pratinjau untuk membantu membidik; bukan teodolit otomatis yang terkalibrasi.
+- Perubahan ini mempertahankan struktur dan fitur lain sebisa mungkin, tetapi harus diuji pada perangkat Android yang digunakan.
+- Integritas JavaScript dan ZIP diperiksa; pengujian visual langsung pada HP belum dilakukan.

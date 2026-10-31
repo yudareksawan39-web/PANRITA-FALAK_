@@ -1,0 +1,9 @@
+PANRITA FALAK — PENYESUAIAN WAKTU, LOKASI, DAN SIMULASI MATAHARI
+
+- Waktu jam beranda menggunakan waktu perangkat.
+- Zona waktu awal simulasi menggunakan zona waktu perangkat; tanggal/jam simulasi mengikuti waktu perangkat sampai pengguna mengubahnya.
+- Simulasi dapat diubah melalui tanggal, waktu, dan zona waktu; gunakan tombol waktu sekarang untuk kembali otomatis.
+- Saat instalasi/penyimpanan lokasi belum tersedia, aplikasi mencoba meminta izin GPS saat awal masuk. Jika izin ditolak atau GPS gagal, pengguna masih dapat mengganti lokasi secara manual.
+- Fitur pemilihan lokasi manual tetap dipertahankan.
+- Modul kamera hisab/Hilal dipertahankan dari versi acuan yang diunggah; izin kamera dan HTTPS/WebView tetap memengaruhi fungsinya.
+- Tidak ada klaim bahwa perhitungan posisi Matahari telah divalidasi secara astronomi tingkat observatorium. Uji silang tetap diperlukan.
