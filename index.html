@@ -256,6 +256,11 @@
             <div class="page-heading"><div><span class="eyebrow">PETA</span><h2>Peta Arah Kiblat</h2><p>Peta, nama wilayah, data astronomi, dan rincian rumus memakai satu koordinat yang sama dengan penanda peta.</p></div><div class="button-row"><button class="secondary-btn" data-action="map-center-user">Gunakan Lokasi Saya (GPS)</button><button class="secondary-btn" data-action="map-show-kaaba">Lihat Ka’bah</button><button class="secondary-btn" data-action="refresh-map">Perbarui Peta</button><button class="primary-btn" data-action="google-earth">Buka di Google Earth ↗</button></div></div>
             <div class="map-card card"><div id="map" class="map" aria-label="Peta interaktif. Ketuk lokasi yang ingin dipilih."></div><div id="mapNotice" class="map-notice">Memuat peta… Pastikan internet aktif.</div></div><p class="hint map-pick-hint">Pilih titik lokasi dengan mengetuk peta. Koordinat dan nama wilayah akan diperbarui sesuai titik yang kamu pilih.</p>
             <div class="map-summary card"><div><span>Arah Kiblat</span><b id="mapBearing">296.7°</b><small id="mapDirection">Barat Laut</small></div><div><span>Jarak ke Ka'bah</span><b id="mapDistance">-- km</b><small>Jarak lingkaran besar</small></div><div><span>Lokasi</span><b id="mapCoords">-4.0189, 119.6238</b><small>Koordinat pengamat</small></div></div>
+            <section class="map-globe-card card" aria-label="Globe 3D arah kiblat">
+              <div class="map-globe-heading"><div><span class="eyebrow">GLOBE 3D INTERAKTIF</span><h3>Jalur Lokasi ke Makkah</h3><p>Putar dan zoom bumi untuk melihat posisi Anda serta arah menuju Ka'bah.</p></div><span class="globe-live-indicator"><i></i> Globe 360°</span></div>
+              <div class="map-globe-stage"><div id="mapGlobe" class="map-globe" role="img" aria-label="Globe tiga dimensi dengan garis penghubung lokasi pengguna ke Makkah"></div><div id="mapGlobeFallback" class="home-globe-fallback" hidden>Globe 3D memerlukan koneksi internet. Periksa koneksi lalu muat ulang aplikasi.</div></div>
+              <div class="map-globe-legend"><span>📍 Lokasi Anda</span><span>🕋 Makkah / Ka'bah</span><span>— Garis penghubung kiblat</span></div>
+            </section>
           
             <div class="card mp-card" id="mapLocInfo">
               <h3>Informasi lokasi</h3>
@@ -387,6 +392,7 @@
   </div>
 
   <script src="config.js"></script>
+  <script src="https://unpkg.com/globe.gl"></script>
   <script src="script.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 </body>

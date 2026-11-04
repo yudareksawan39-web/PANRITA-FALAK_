@@ -292,7 +292,7 @@ function navigate(page){
   $$(".page").forEach(p=>p.classList.toggle("active",p.id===`page-${page}`));
   $$(".nav-item[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
   $("#sidebar").classList.remove("open");
-  if(page==="map"){initEmbeddedMap();setTimeout(()=>state.map?.invalidateSize?.(),180)}
+  if(page==="map"){initEmbeddedMap();setTimeout(()=>{state.map?.invalidateSize?.();initPanritaMapGlobe();updateMapGlobeLocation();},180)}
   if(page==="theodolite") updateTeodolite();
   if(page==="monthly") renderMonthly();
   if(page==="prayer") renderPrayer();
@@ -305,9 +305,9 @@ function updateAll(){
   const loc=state.location.name;
   ["homeLocation","qiblaLocation","sunLocation","rashdulLocation"].forEach(id=>{const e=$("#"+id);if(e)e.textContent=loc});
   ["homeCoords","qiblaCoords"].forEach(id=>{const e=$("#"+id);if(e)e.textContent=`Lat ${state.location.lat.toFixed(4)}° • Lon ${state.location.lon.toFixed(4)}°`});
-  $("#homeQibla").textContent=b.toFixed(1)+"°"; $("#homeQiblaDir").textContent=cardinal(b);
-  $("#qiblaBearing").textContent=b.toFixed(1)+"°"; $("#qiblaDirection").textContent=cardinal(b);
-  $("#qiblaAzimuth").textContent=b.toFixed(1)+"°"; $("#qiblaCardinal").textContent=cardinal(b);
+  $("#homeQibla").textContent=formatDMS(b); $("#homeQiblaDir").textContent=cardinal(b);
+  $("#qiblaBearing").textContent=formatDMS(b); $("#qiblaDirection").textContent=cardinal(b);
+  $("#qiblaAzimuth").textContent=formatDMS(b); $("#qiblaCardinal").textContent=cardinal(b);
   $("#mapBearing").textContent=b.toFixed(1)+"°"; $("#mapDirection").textContent=cardinal(b);
   $("#mapDistance").textContent=dist.toFixed(1)+" km"; $("#distanceMakkah").textContent=dist.toFixed(1)+" km";
   $("#mapCoords").textContent=`${state.location.lat.toFixed(4)}, ${state.location.lon.toFixed(4)}`;
@@ -315,6 +315,7 @@ function updateAll(){
   updateSun();
   renderRashdul();
   updateCompassVisual();
+  updateMapGlobeLocation();
   updateMapIfReady();
   renderMapInfo();
 }
@@ -355,6 +356,52 @@ function updateClock(){
   updateSun();
   if(!simulationManuallyEdited){const field=$("#solarSimulationDate");if(field){field.value=localDateTimeValue(n);const simZone=$("#solarSimulationTimezone");if(simZone)simZone.value=String(state.settings.timezone);simulateSunPosition();}}
 }
+// Globe 3D bertekstur satelit; marker selalu mengikuti koordinat lokasi aplikasi.
+let panritaHomeGlobe=null;
+let panritaGlobeResizeObserver=null;
+function updateMapGlobeLocation(){
+  const lat=Number(state.location.lat),lng=Number(state.location.lon);
+  if(!panritaHomeGlobe)return;
+  const kaaba={lat:21.4225,lng:39.8262};
+  panritaHomeGlobe.pointsData([
+    {lat,lng,size:0.34,color:"#35e0ff",name:"📍 Lokasi Anda"},
+    {lat:kaaba.lat,lng:kaaba.lng,size:0.42,color:"#ffd166",name:"🕋 Makkah / Ka'bah"}
+  ]);
+  panritaHomeGlobe.arcsData([{startLat:lat,startLng:lng,endLat:kaaba.lat,endLng:kaaba.lng}]);
+  const label=document.querySelector('#mapGlobeLocationLabel');
+  if(label)label.textContent=state.location.name||"Lokasi Anda";
+}
+function initPanritaMapGlobe(){
+  const el=$("#mapGlobe");
+  if(!el||panritaHomeGlobe)return;
+  if(typeof window.Globe!=="function"){
+    const fallback=$("#mapGlobeFallback");if(fallback)fallback.hidden=false;return;
+  }
+  try{
+    const width=Math.max(280,el.clientWidth||320);
+    panritaHomeGlobe=window.Globe()(el)
+      .width(width).height(Math.min(520,Math.max(310,width*.78)))
+      .backgroundColor("#020711")
+      .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
+      .bumpImageUrl("https://unpkg.com/three-globe/example/img/earth-topology.png")
+      .showAtmosphere(true).atmosphereColor("#55aaff").atmosphereAltitude(0.14)
+      .pointsData([]).pointLat("lat").pointLng("lng").pointColor("color")
+      .pointAltitude(0.025).pointRadius("size").pointResolution(32)
+      .pointLabel(d=>`<div style="padding:6px 9px;color:#fff;background:#07172a;border:1px solid #69cfff;border-radius:9px;font:12px Inter,sans-serif">${d.name}</div>`)
+      .arcsData([]).arcStartLat("startLat").arcStartLng("startLng").arcEndLat("endLat").arcEndLng("endLng")
+      .arcColor(()=>["#45d9ff","#ffd166"]).arcDashLength(.55).arcDashGap(.18).arcDashAnimateTime(2200).arcStroke(1.8).arcAltitudeAutoScale(.35)
+      .polygonsData([]).polygonAltitude(.001).polygonCapColor(()=>"rgba(0,0,0,0)")
+      .polygonSideColor(()=>"rgba(0,0,0,0)").polygonStrokeColor(()=>"rgba(220,235,255,.5)");
+    fetch("https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson")
+      .then(r=>{if(!r.ok)throw new Error("Data batas negara tidak tersedia");return r.json()})
+      .then(data=>{if(panritaHomeGlobe)panritaHomeGlobe.polygonsData(data.features||[]);})
+      .catch(error=>console.warn("Batas negara globe tidak dapat dimuat:",error));
+    const controls=panritaHomeGlobe.controls();controls.autoRotate=false;controls.enablePan=false;controls.enableZoom=true;controls.minDistance=125;controls.maxDistance=600;controls.zoomSpeed=.8;controls.rotateSpeed=.65;
+    updateMapGlobeLocation();
+    if("ResizeObserver" in window){panritaGlobeResizeObserver=new ResizeObserver(()=>{if(!panritaHomeGlobe)return;const w=Math.max(280,el.clientWidth||320);panritaHomeGlobe.width(w).height(Math.min(520,Math.max(310,w*.78)));});panritaGlobeResizeObserver.observe(el);}
+  }catch(error){console.error("GLOBE ERROR:",error);const fallback=$("#mapGlobeFallback");if(fallback)fallback.hidden=false;}
+}
+
 function updateCompassVisual(){
   const b=qiblaBearing(state.location.lat,state.location.lon);
   const heading=Number.isFinite(state.sensorHeading) ? state.sensorHeading : null;
@@ -427,7 +474,7 @@ function handleOrientation(event){
   const headingEl=$("#sensorHeading");
   const textEl=$("#sensorText");
   if(status) status.textContent="Sensor aktif";
-  if(headingEl) headingEl.textContent=state.sensorHeading.toFixed(1)+"°";
+  if(headingEl) headingEl.textContent=formatDMS(state.sensorHeading);
   if(textEl) textEl.textContent="Arah sensor terbaca. Jauhkan dari logam/magnet dan kalibrasikan perangkat bila bacaan tidak stabil.";
 
   // HANYA jarum kiblat yang bergerak mengikuti heading HP.
