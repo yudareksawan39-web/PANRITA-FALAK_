@@ -1,9 +1,3 @@
-function formatDMS(value, signed=false){
-  if(!Number.isFinite(value)) return "--";
-  const sign=value<0?"−":""; let total=Math.round(Math.abs(value)*3600);
-  const d=Math.floor(total/3600); total-=d*3600; const m=Math.floor(total/60); const s=total-m*60;
-  return `${signed?sign:""}${d}° ${String(m).padStart(2,"0")}′ ${String(s).padStart(2,"0")}″`;
-}
 (() => {
 "use strict";
 
@@ -59,6 +53,12 @@ function formatTime(h) {
   totalMinutes = ((totalMinutes % 1440) + 1440) % 1440;
   return `${pad(Math.floor(totalMinutes / 60))}:${pad(totalMinutes % 60)}`;
 }
+function formatDMS(value, signed=false){
+  if(!Number.isFinite(value)) return "--";
+  const sign=value<0?"−":""; let total=Math.round(Math.abs(value)*3600);
+  const d=Math.floor(total/3600); total-=d*3600; const m=Math.floor(total/60); const s=total-m*60;
+  return `${signed?sign:""}${d}° ${String(m).padStart(2,"0")}′ ${String(s).padStart(2,"0")}″`;
+}
 function d2r(x){return x*Math.PI/180}
 function r2d(x){return x*180/Math.PI}
 
@@ -108,7 +108,7 @@ function solarPosition(date, lat, lon, timezone, wallClockMinutes=null){
   const altitude=r2d(Math.asin(Math.sin(latr)*Math.sin(decr)+Math.cos(latr)*Math.cos(decr)*Math.cos(d2r(ha))));
   let az=r2d(Math.atan2(Math.sin(d2r(ha)),Math.cos(d2r(ha))*Math.sin(latr)-Math.tan(decr)*Math.cos(latr)))+180;
   az=norm360(az);
-  return {decl,eqTime,altitude,azimuth:az,solarMinutes,ha};
+  return {decl,eqTime,altitude,azimuth:az,solarMinutes,ha,jd,T,L,M,lambda,eps:obliqCorr,tst};
 }
 
 function julianDay(y,m,d){ if(m<=2){y--;m+=12} return Math.floor(365.25*(y+4716))+Math.floor(30.6001*(m+1))+d-1524.5; }
@@ -191,8 +191,12 @@ function getLocationName(lat,lon){
   if(Math.abs(lat+4.0189)<.2 && Math.abs(lon-119.6238)<.2)return DEFAULT.name;
   return `Lokasi ${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
 }
-function setLocation(lat,lon,elevation=50,name=getLocationName(lat,lon)){
-  state.location={...state.location,lat:Number(lat),lon:Number(lon),elevation:Number(elevation)||0,name};
+function setLocation(lat,lon,elevation=50,name=getLocationName(lat,lon),place,source){
+  lat=Number(lat);lon=Number(lon);
+  const same=Math.abs(lat-state.location.lat)<1e-9&&Math.abs(lon-state.location.lon)<1e-9;
+  state.location={...state.location,lat,lon,elevation:Number(elevation)||0,name,
+    place:place!==undefined?place:(same?state.location.place:null),
+    source:source||(same?state.location.source:"manual")};
   $("#latInput").value=state.location.lat; $("#lonInput").value=state.location.lon; $("#elevInput").value=state.location.elevation;
   updateAll();
   if(state.page==="calc"){const active=$(".formula-tab.active");if(active)renderFormula(active.dataset.formula)}
@@ -200,31 +204,58 @@ function setLocation(lat,lon,elevation=50,name=getLocationName(lat,lon)){
   updateGoogleEarthLink();
   if($("#page-theodolite")) updateTeodolite();
 }
-async function reverseGeocodeLocation(lat,lon){
-  // Reverse geocoding: konversi koordinat GPS menjadi nama wilayah administratif.
-  const url=`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`;
-  const response=await fetch(url,{headers:{"Accept":"application/json"}});
+async function reverseGeocodePlace(lat,lon){
+  // Reverse geocoding OpenStreetMap (Nominatim): koordinat -> nama wilayah administratif.
+  const url=`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1&accept-language=id`;
+  const ctl=typeof AbortController!=="undefined"?new AbortController():null;
+  const timer=ctl?setTimeout(()=>ctl.abort(),12000):null;
+  let response;
+  try{response=await fetch(url,{headers:{"Accept":"application/json"},signal:ctl?ctl.signal:undefined});}
+  finally{if(timer)clearTimeout(timer);}
   if(!response.ok)throw new Error("Layanan peta tidak merespons");
   const data=await response.json(),a=data.address||{};
-  const kabupaten=a.city||a.town||a.municipality||a.county||a.state_district||a.village||a.suburb;
-  const provinsi=a.state||a.region;
-  if(kabupaten&&provinsi)return `${kabupaten}, ${provinsi}`;
-  if(data.display_name)return data.display_name.split(",").slice(0,3).join(", ");
-  throw new Error("Nama wilayah tidak tersedia");
+  const village=a.village||a.hamlet||a.neighbourhood||a.quarter||(a.city_district||a.municipality?a.suburb:"")||"";
+  const district=a.city_district||a.municipality||(a.suburb&&a.suburb!==village?a.suburb:"")||"";
+  const regency=a.city||a.county||a.regency||a.town||a.state_district||"";
+  const province=a.state||a.region||"";
+  const country=a.country||"";
+  const placeName=data.name||a.road||village||district||"";
+  if(!regency&&!province&&!country&&!data.display_name)throw new Error("Nama wilayah tidak tersedia");
+  return {status:"ok",placeName,village,district,regency,province,country,display:data.display_name||"",
+    short:regency&&province?`${regency}, ${province}`:(data.display_name?data.display_name.split(",").slice(0,3).join(", "):"")};
 }
+async function reverseGeocodeLocation(lat,lon){const p=await reverseGeocodePlace(lat,lon);return p.short;}
 window.FALAK_REVERSE_GEOCODE=reverseGeocodeLocation;
+/* Satu pintu untuk GPS dan klik peta: koordinat disimpan dulu (hitungan & marker langsung ikut),
+   lalu nama wilayah dicari. Jika internet putus, koordinat tetap dipakai. */
+async function applyObserverLocation(lat,lon,opts={}){
+  const source=opts.source||"gps";
+  const token=state.geoToken=(state.geoToken||0)+1;
+  const elevation=Number.isFinite(opts.elevation)?opts.elevation:state.location.elevation;
+  const coordName=`${source==="gps"?"Koordinat GPS":"Titik peta"} (${lat.toFixed(6)}°, ${lon.toFixed(6)}°)`;
+  state.gpsAccuracy=source==="gps"&&Number.isFinite(opts.accuracy)?opts.accuracy:null;
+  setLocation(lat,lon,elevation,coordName,{status:"loading"},source);
+  state.location.accuracy=state.gpsAccuracy;
+  renderMapInfo();
+  let place;
+  try{place=await reverseGeocodePlace(lat,lon);}
+  catch(e){place={status:"error",message:(e&&e.message)||"Gagal"};console.warn("Nama wilayah belum dapat diperoleh:",e);}
+  if(token!==state.geoToken)return place; // ada pilihan lokasi yang lebih baru
+  const name=place.status==="ok"&&place.short?place.short:coordName;
+  setLocation(lat,lon,elevation,name,place,source);
+  state.location.accuracy=state.gpsAccuracy;
+  try{localStorage.setItem("falakLocation",JSON.stringify(state.location));}catch(e){}
+  updateTeodolite();
+  const notice=$("#mapNotice");
+  if(notice){notice.style.display="block";notice.textContent=place.status==="ok"?`Lokasi: ${name} · ${lat.toFixed(6)}, ${lon.toFixed(6)}. Ketuk peta untuk memilih titik lain.`:`Koordinat ${lat.toFixed(6)}, ${lon.toFixed(6)} dipakai, tetapi nama wilayah belum berhasil diperoleh (periksa internet).`;}
+  if(!opts.silent&&place.status!=="ok")alert("Koordinat berhasil diambil dan dipakai untuk semua perhitungan, tetapi nama wilayah belum berhasil diperoleh. Pastikan internet aktif lalu coba lagi.");
+  return place;
+}
 function requestLocation(silent=false){
   if(!navigator.geolocation){if(!silent)alert("Perangkat atau browser ini tidak menyediakan GPS.");return;}
-  navigator.geolocation.getCurrentPosition(async pos=>{
-    const lat=pos.coords.latitude,lon=pos.coords.longitude;
-    state.gpsAccuracy=Number.isFinite(pos.coords.accuracy)?pos.coords.accuracy:null;
-    let name=`Koordinat GPS (${lat.toFixed(6)}°, ${lon.toFixed(6)}°)`;
-    try{name=await reverseGeocodeLocation(lat,lon);}catch(e){if(!silent)console.warn("Nama wilayah GPS belum dapat diperoleh:",e);}
-    setLocation(lat,lon,pos.coords.altitude||state.location.elevation,name);
-    try{localStorage.setItem("falakLocation",JSON.stringify(state.location));}catch(e){}
-    updateTeodolite();
-    if(!silent&&name.startsWith("Koordinat GPS"))alert("Koordinat GPS berhasil diambil, tetapi nama kota/provinsi belum tersedia. Pastikan internet aktif lalu coba lagi.");
-  },err=>{if(!silent)alert("Lokasi perangkat tidak dapat diambil: "+err.message+". Anda tetap dapat memilih lokasi atau mencoba GPS lagi.");},{enableHighAccuracy:true,timeout:18000,maximumAge:0});
+  navigator.geolocation.getCurrentPosition(pos=>{
+    applyObserverLocation(pos.coords.latitude,pos.coords.longitude,{source:"gps",accuracy:pos.coords.accuracy,elevation:Number.isFinite(pos.coords.altitude)?pos.coords.altitude:undefined,silent});
+  },err=>{if(!silent)alert("Lokasi perangkat tidak dapat diambil: "+err.message+". Anda tetap dapat memilih lokasi di peta atau mencoba GPS lagi.");},{enableHighAccuracy:true,timeout:18000,maximumAge:0});
 }
 
 function navigate(page){
@@ -257,6 +288,7 @@ function updateAll(){
   renderRashdul();
   updateCompassVisual();
   updateMapIfReady();
+  renderMapInfo();
 }
 function nextPrayerData(date){
   const t=prayerTimes(date);
@@ -457,15 +489,10 @@ function initEmbeddedMap(){
   state.mapReady=true;
   const notice=$("#mapNotice");if(notice){notice.style.display="block";notice.textContent="Peta aktif. Ketuk titik mana pun untuk memilih lokasi; nama wilayah dan koordinat akan diperbarui.";}
   // Ketukan pada peta memilih koordinat tersebut sebagai lokasi pengamat.
-  state.map.on("click", async (event)=>{
-    const lat=event.latlng.lat,lon=event.latlng.lng;
+  state.map.on("click",(event)=>{
     const notice=$("#mapNotice");
-    if(notice){notice.style.display="block";notice.textContent=`Mengambil nama lokasi untuk ${lat.toFixed(6)}, ${lon.toFixed(6)}…`;}
-    let name=`Titik peta (${lat.toFixed(6)}°, ${lon.toFixed(6)}°)`;
-    try{name=await reverseGeocodeLocation(lat,lon);}catch(error){console.warn("Nama lokasi titik peta tidak tersedia:",error);}
-    setLocation(lat,lon,state.location.elevation,name);
-    try{localStorage.setItem("falakLocation",JSON.stringify(state.location));}catch(error){}
-    if(notice){notice.style.display="block";notice.textContent=`Lokasi dipilih: ${name} · ${lat.toFixed(6)}, ${lon.toFixed(6)}. Ketuk peta untuk memilih titik lain.`;}
+    if(notice){notice.style.display="block";notice.textContent=`Mengambil nama lokasi untuk ${event.latlng.lat.toFixed(6)}, ${event.latlng.lng.toFixed(6)}…`;}
+    applyObserverLocation(event.latlng.lat,event.latlng.lng,{source:"map",silent:true});
   });
   updateMap();
 }
@@ -488,6 +515,159 @@ function updateMap(){
   const notice=$("#mapNotice");if(notice)notice.style.display="block";
 }
 function updateMapIfReady(){if(state.mapReady)updateMap()}
+
+/* ===== Halaman Peta: informasi lokasi, data astronomi, dan rincian perhitungan ===== */
+function nowInZone(zone){return new Date(Date.now()+zone*3600000).toISOString().slice(0,16);}
+function computeMapAstronomy(){
+  const val=$("#mpDate")?.value,zone=Number($("#mpTimezone")?.value);
+  if(!val||!Number.isFinite(zone))return null;
+  const [ds,ts]=val.split("T"),dp=(ds||"").split("-").map(Number),tp=(ts||"").split(":").map(Number);
+  if(dp.length!==3||tp.length<2||dp.some(v=>!Number.isFinite(v))||tp.some(v=>!Number.isFinite(v)))return null;
+  const [y,mo,d]=dp,hh=tp[0],mi=tp[1],wall=hh*60+mi;
+  const instant=Date.UTC(y,mo-1,d,hh,mi,0)-zone*3600000;
+  const lat=state.location.lat,lon=state.location.lon;
+  const sp=solarPosition(new Date(instant),lat,lon,zone,wall);
+  return {lat,lon,zone,y,mo,d,hh,mi,wall,instant,sp};
+}
+function mpClock(min){
+  let t=Math.round((((min%1440)+1440)%1440)*60);
+  const h=Math.floor(t/3600),m=Math.floor((t%3600)/60),s=t%60;
+  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+/* Cari waktu (menit jam dinding) ketika tinggi Matahari melewati targetAlt pada hari tersebut. */
+function mpSunCrossings(c,targetAlt){
+  const at=m=>solarPosition(new Date(Date.UTC(c.y,c.mo-1,c.d,0,0,0)+m*60000-c.zone*3600000),c.lat,c.lon,c.zone,m);
+  let prev=at(0),morning=null,afternoon=null;
+  for(let m=1;m<=1439;m++){
+    const cur=at(m);
+    if(morning===null&&prev.altitude<targetAlt&&cur.altitude>=targetAlt)morning=m-1+(targetAlt-prev.altitude)/(cur.altitude-prev.altitude);
+    if(prev.altitude>=targetAlt&&cur.altitude<targetAlt)afternoon=m-1+(prev.altitude-targetAlt)/(prev.altitude-cur.altitude);
+    prev=cur;
+  }
+  if(morning===null||afternoon===null)return null;
+  return {morning,afternoon,spM:at(morning),spA:at(afternoon)};
+}
+function renderMapInfo(){
+  if(!$("#mapLocInfo"))return;
+  const loc=state.location,pl=loc.place||null,set=(id,v)=>{const e=$("#"+id);if(e)e.textContent=v};
+  const dash="—";
+  const src={gps:"GPS perangkat",map:"Titik yang dipilih di peta",manual:"Input/daftar lokasi manual"}[loc.source]||"Lokasi tersimpan";
+  set("mpSource",src);
+  const ok=pl&&pl.status==="ok";
+  set("mpPlaceName",ok?(pl.placeName||pl.short||dash):(loc.name||dash));
+  set("mpVillage",ok&&pl.village?pl.village:dash);
+  set("mpDistrict",ok&&pl.district?pl.district:dash);
+  set("mpRegency",ok&&pl.regency?pl.regency:dash);
+  set("mpProvince",ok&&pl.province?pl.province:dash);
+  set("mpCountry",ok&&pl.country?pl.country:dash);
+  set("mpLat",loc.lat.toFixed(6)+"°");set("mpLon",loc.lon.toFixed(6)+"°");
+  set("mpElev",Number.isFinite(loc.elevation)?loc.elevation.toFixed(1)+" m":dash);
+  set("mpAccuracy",loc.source==="gps"&&Number.isFinite(loc.accuracy)?"±"+Math.round(loc.accuracy)+" m (dilaporkan perangkat)":dash);
+  set("mpGeoStatus",!pl?"Nama wilayah belum dicari. Tekan “Lokasi Saya” atau ketuk peta.":pl.status==="loading"?"Mencari nama wilayah dari OpenStreetMap…":ok?"Nama wilayah diperoleh dari OpenStreetMap (reverse geocoding). Desa/kelurahan dan kecamatan bergantung pada kelengkapan data peta; tanda — berarti tidak tersedia.":"Nama wilayah belum berhasil diperoleh ("+(pl.message||"tanpa internet")+"). Koordinat tetap dipakai untuk semua perhitungan.");
+  const c=computeMapAstronomy();
+  const qb=qiblaBearing(loc.lat,loc.lon),dist=distanceKm(loc.lat,loc.lon);
+  if(!c){set("mpCalcNote","Isi tanggal dan waktu pengamatan yang valid.");return;}
+  const sp=c.sp,fx=(v,n=5)=>Number.isFinite(v)?v.toFixed(n):"--";
+  const dm=(v,s)=>formatDMS(v,s)+` (${fx(v)}°)`;
+  const etSign=sp.eqTime<0?"−":"+",etAbs=Math.abs(sp.eqTime);
+  set("mpSunAz",dm(sp.azimuth));set("mpSunAlt",dm(sp.altitude,true));set("mpSunDecl",dm(sp.decl,true));
+  set("mpEoT",`${etSign}${Math.floor(etAbs)} mnt ${(((etAbs%1)*60)).toFixed(1)} dtk (${fx(sp.eqTime,4)} menit)`);
+  set("mpTST",mpClock(sp.tst));set("mpHA",dm(sp.ha,true));
+  set("mpQibla",dm(qb));set("mpDist",dist.toFixed(2)+" km");
+  set("mpCalcNote",`Koordinat: ${fx(loc.lat,6)}°, ${fx(loc.lon,6)}° (sama dengan penanda peta) · ${String(c.d).padStart(2,"0")}-${String(c.mo).padStart(2,"0")}-${c.y} ${String(c.hh).padStart(2,"0")}:${String(c.mi).padStart(2,"0")} UTC${c.zone>=0?"+":""}${c.zone}`);
+  renderMapDetails(c,qb,dist);
+}
+function renderMapDetails(c,qb,dist){
+  const box=$("#mapCalcDetails");if(!box)return;
+  const open={};box.querySelectorAll("details").forEach(d=>{open[d.dataset.key]=d.open});
+  const sp=c.sp,lat=c.lat,lon=c.lon,H=sp.ha,dec=sp.decl;
+  const f=(v,n=6)=>Number.isFinite(v)?v.toFixed(n):"--",D=v=>formatDMS(v,true);
+  const sinφ=Math.sin(d2r(lat)),cosφ=Math.cos(d2r(lat)),sinδ=Math.sin(d2r(dec)),cosδ=Math.cos(d2r(dec)),cosH=Math.cos(d2r(H)),sinH=Math.sin(d2r(H)),tanδ=Math.tan(d2r(dec));
+  const TH='<span class="mp-badge theory">Teoritis (hisab)</span>',FD='<span class="mp-badge field">Pengamatan lapangan (input Anda)</span>';
+  const step=(t,rumus,subst,hasil)=>`<div class="mp-step"><b>${t}</b><div><small>Rumus</small><code>${rumus}</code></div><div><small>Substitusi</small><code>${subst}</code></div><div><small>Hasil</small><strong>${hasil}</strong></div></div>`;
+  const blk=(key,title,badge,body)=>`<details class="mp-block" data-key="${key}"${(open[key]===undefined?key==="time":open[key])?" open":""}><summary>${title} ${badge}</summary>${body}</details>`;
+  const days=c.wall;
+  /* 1. waktu */
+  const b1=
+    step("Julian Day dan T","JD = (waktu UTC dalam ms) / 86 400 000 + 2 440 587,5 ; T = (JD − 2 451 545) / 36 525",`JD = ${f(sp.jd,5)} ; T = (${f(sp.jd,5)} − 2451545)/36525`,`T = ${f(sp.T,9)} abad`)+
+    step("Bujur rata-rata Matahari (L) dan anomali rata-rata (M)","L = 280,46646 + 36000,76983·T + 0,0003032·T² ; M = 357,52911 + 35999,05029·T − 0,0001537·T²",`T = ${f(sp.T,9)}`,`L = ${f(sp.L,5)}° ; M = ${f(sp.M,5)}°`)+
+    step("Deklinasi Matahari (δ)","δ = asin( sin ε · sin λ )  (ε = kemiringan ekliptika terkoreksi, λ = bujur tampak Matahari)",`ε = ${f(sp.eps,5)}° ; λ = ${f(sp.lambda,5)}° → sin ε · sin λ = ${f(Math.sin(d2r(sp.eps))*Math.sin(d2r(sp.lambda)),7)}`,`δ = ${D(dec)} = ${f(dec)}°`)+
+    step("Equation of Time (e)","e = 4·(180/π)·[ y·sin2L − 2·ex·sinM + 4·ex·y·sinM·cos2L − ½·y²·sin4L − 5/4·ex²·sin2M ] menit ; y = tan²(ε/2)",`L = ${f(sp.L,4)}° ; M = ${f(sp.M,4)}° ; ε = ${f(sp.eps,4)}°`,`e = ${f(sp.eqTime,4)} menit`)+
+    step("Waktu Matahari sejati (TST)","TST = t_lokal + e + 4·λ − 60·zona   (menit; λ = bujur timur, zona dalam jam)",`t_lokal = ${days} menit ; e = ${f(sp.eqTime,4)} ; 4·λ = 4·${f(lon,6)} = ${f(4*lon,4)} ; 60·zona = 60·${c.zone} = ${60*c.zone}`,`TST = ${f(sp.tst,4)} menit = ${mpClock(sp.tst)}`)+
+    step("Sudut jam Matahari (H)","H = TST / 4 − 180°",`H = ${f(sp.tst,4)} / 4 − 180`,`H = ${D(H)} = ${f(H)}°`);
+  /* 2. tinggi */
+  const sinh=sinφ*sinδ+cosφ*cosδ*cosH;
+  const b2=step("Tinggi (altitude) Matahari","sin h = sin φ · sin δ + cos φ · cos δ · cos H",
+    `sin(${f(lat,5)}°)·sin(${f(dec,5)}°) + cos(${f(lat,5)}°)·cos(${f(dec,5)}°)·cos(${f(H,5)}°) = (${f(sinφ,6)})(${f(sinδ,6)}) + (${f(cosφ,6)})(${f(cosδ,6)})(${f(cosH,6)}) = ${f(sinh,7)}`,
+    `h = asin(${f(sinh,7)}) = ${D(sp.altitude)} = ${f(sp.altitude)}°`)+
+    `<p class="hint">Tinggi geometris pusat Matahari, tanpa koreksi refraksi, semidiameter, dan paralaks. Ketelitian pendekatan NOAA/Meeus ini sekitar sepersekian derajat.</p>`;
+  /* 3. azimut */
+  const ay=-sinH,ax=tanδ*cosφ-sinφ*cosH,A=norm360(r2d(Math.atan2(ay,ax)));
+  const b3=step("Azimut Matahari (dari Utara, searah jarum jam)","A = atan2( −sin H , tan δ · cos φ − sin φ · cos H )",
+    `y = −sin(${f(H,5)}°) = ${f(ay,7)} ; x = tan(${f(dec,5)}°)·cos(${f(lat,5)}°) − sin(${f(lat,5)}°)·cos(${f(H,5)}°) = ${f(tanδ,6)}·${f(cosφ,6)} − ${f(sinφ,6)}·${f(cosH,6)} = ${f(ax,7)}`,
+    `A = atan2(${f(ay,7)}, ${f(ax,7)}) = ${D(A)} = ${f(A)}°`)+
+    `<p class="hint">Pemeriksaan silang dengan nilai di tabel: selisih ${Math.abs(signedAngleDifference(A,sp.azimuth)).toExponential(2)}°.</p>`;
+  /* 4. kiblat */
+  const dl=KAABA.lon-lon,qy=Math.sin(d2r(dl)),qx=cosφ*Math.tan(d2r(KAABA.lat))-sinφ*Math.cos(d2r(dl));
+  const dp=d2r(KAABA.lat-lat),dlr=d2r(dl),a=Math.sin(dp/2)**2+cosφ*Math.cos(d2r(KAABA.lat))*Math.sin(dlr/2)**2;
+  const b4=step("Azimut kiblat (lingkaran besar)","Q = atan2( sin Δλ , cos φ · tan φk − sin φ · cos Δλ ) ; Δλ = λk − λ",
+    `φk = ${KAABA.lat}°, λk = ${KAABA.lon}° ; Δλ = ${f(dl,6)}° ; y = ${f(qy,7)} ; x = ${f(cosφ,6)}·${f(Math.tan(d2r(KAABA.lat)),6)} − ${f(sinφ,6)}·${f(Math.cos(d2r(dl)),6)} = ${f(qx,7)}`,
+    `Q = ${D(qb)} = ${f(qb)}° (${cardinal(qb)})`)+
+    step("Jarak ke Ka'bah (haversine)","a = sin²(Δφ/2) + cos φ · cos φk · sin²(Δλ/2) ; d = R · 2 · atan2(√a, √(1−a)) ; R = 6371,0088 km",
+    `a = ${f(a,10)} ; d = 6371,0088 · 2 · atan2(${f(Math.sqrt(a),8)}, ${f(Math.sqrt(1-a),8)})`,`d = ${f(dist,3)} km`);
+  /* 5. utara sejati */
+  const R=Number($("#mpSunReading")?.value),hasR=($("#mpSunReading")?.value||"").trim()!==""&&Number.isFinite(R);
+  const g=Number($("#mpGnomonH")?.value)||1,r=Number($("#mpCircleR")?.value)||1;
+  const m1=hasR?step("Arah utara sejati pada skala alat",
+      "Bacaan utara sejati = R − A   (mod 360°) ; R = bacaan lingkaran horizontal saat membidik Matahari",
+      `R = ${f(R,4)}° (pengamatan) ; A = ${f(A,5)}° (teoritis, waktu pengamatan di atas)`,
+      `${D(norm360(R-A))} = ${f(norm360(R-A),5)}° ${FD}`)
+    :`<p class="hint">Isi “Bacaan alat ke Matahari (R)” pada kartu masukan lapangan untuk menghitung utara sejati: <code>R − A</code>, dengan A = ${f(A,5)}° (teoritis).</p>`;
+  const shadowLen=sp.altitude>0?g/Math.tan(d2r(sp.altitude)):null,shadowAz=norm360(A+180);
+  const gn=step("Bayangan gnomon pada waktu pengamatan","L = g / tan h ; arah bayangan = A + 180°",
+    `g = ${f(g,3)} m ; h = ${f(sp.altitude,5)}° ; A = ${f(A,5)}°`,
+    shadowLen===null?"Matahari di bawah horizon: tidak ada bayangan":`L = ${f(shadowLen,4)} m ; arah bayangan = ${D(shadowAz)} = ${f(shadowAz,4)}°`);
+  let corr="";
+  const target=r2d(Math.atan(g/r)),cr=mpSunCrossings(c,target);
+  if(!cr)corr=`<p class="hint">Pada tanggal ini Matahari tidak melewati tinggi ${f(target,3)}° (g/r = ${f(g/r,3)}), sehingga lingkaran bayangan tidak terbentuk. Ubah r atau g.</p>`;
+  else{
+    const b1a=norm360(cr.spM.azimuth+180),b2a=norm360(cr.spA.azimuth+180);
+    const x1=r*Math.sin(d2r(b1a)),y1=r*Math.cos(d2r(b1a)),x2=r*Math.sin(d2r(b2a)),y2=r*Math.cos(d2r(b2a));
+    const th=norm360(r2d(Math.atan2(x2-x1,y2-y1))),dd=signedAngleDifference(th,90);
+    corr=step("Koreksi deklinasi pada metode lingkaran India (Indian circle)",
+      "Ujung bayangan menyentuh lingkaran berjari-jari r saat tinggi Matahari h = atan(g/r), pagi dan sore. Garis ujung pagi → ujung sore berarah θ dari utara sejati; idealnya 90° (Timur–Barat). Δ = θ − 90°",
+      `h = atan(${f(g,3)}/${f(r,3)}) = ${f(target,4)}° ; pagi ${mpClock(cr.morning)} (A = ${f(cr.spM.azimuth,4)}°), sore ${mpClock(cr.afternoon)} (A = ${f(cr.spA.azimuth,4)}°) ; δ pagi = ${f(cr.spM.decl,4)}°, sore = ${f(cr.spA.decl,4)}°`,
+      `θ = ${f(th,4)}° ; Δ = ${f(dd,4)}° (${D(dd)}). Putar garis hasil ukur sebesar ${f(-dd,4)}° (positif = searah jarum jam) untuk mendapat garis Timur–Barat sejati; utara sejati tegak lurus padanya. ${TH}`);
+  }
+  const prosedur=`<ol class="mp-proc"><li>Pasang gnomon (tongkat tegak lurus; periksa dengan unting-unting/waterpass) di tanah datar dan terbuka; ukur tinggi g.</li>
+    <li>Gambar lingkaran berjari-jari r dengan gnomon sebagai pusat.</li>
+    <li>Pagi: tandai titik tempat ujung bayangan masuk ke lingkaran (T1) dan catat waktu. Sore: tandai titik tempat ujung bayangan keluar dari lingkaran (T2) dan catat waktu.</li>
+    <li>Garis T1–T2 adalah Timur–Barat semu; garis tegak lurus melalui titik tengah T1–T2 dan gnomon adalah arah utara–selatan.</li>
+    <li>Terapkan koreksi Δ di atas (akibat perubahan deklinasi Matahari antara pagi dan sore), lalu bandingkan dengan arah utara dari alat/kompas.</li>
+    <li>Kendala lapangan: bayangan buram (penumbra), gnomon miring, tanah tidak rata. Ulangi beberapa kali dan rata-ratakan.</li></ol>`;
+  const b5=`<h4>Metode 1 — Azimut Matahari + bacaan alat ${hasR?FD:TH}</h4>${m1}<h4>Metode 2 — Bayangan gnomon ${TH}</h4>${gn}${corr}${prosedur}`;
+  box.innerHTML=
+    blk("time","1. Waktu & posisi Matahari: deklinasi, equation of time, waktu Matahari sejati",TH,b1)+
+    blk("alt","2. Tinggi Matahari",TH,b2)+
+    blk("az","3. Azimut Matahari",TH,b3)+
+    blk("qibla","4. Arah kiblat & jarak ke Ka'bah",TH,b4)+
+    blk("north","5. Penentuan utara sejati (azimut Matahari & gnomon)","",b5);
+}
+function initMapAstronomy(){
+  if(!$("#mapLocInfo")||state.mpInit)return;state.mpInit=true;state.mpLive=true;
+  const zoneSel=$("#mpTimezone"),dateEl=$("#mpDate");
+  const z=String(state.settings.timezone);
+  if(zoneSel){zoneSel.value=[...zoneSel.options].some(o=>o.value===z)?z:"8";}
+  const zone=()=>Number(zoneSel?.value)||0;
+  const tick=()=>{if(state.mpLive&&dateEl){dateEl.value=nowInZone(zone());renderMapInfo();}};
+  dateEl&&(dateEl.value=nowInZone(zone()));
+  dateEl?.addEventListener("input",()=>{state.mpLive=false;renderMapInfo()});
+  zoneSel?.addEventListener("change",()=>{if(state.mpLive&&dateEl)dateEl.value=nowInZone(zone());renderMapInfo()});
+  $$('[data-action="mp-now"]').forEach(b=>b.addEventListener("click",()=>{state.mpLive=true;tick()}));
+  ["mpGnomonH","mpCircleR","mpSunReading"].forEach(id=>$("#"+id)?.addEventListener("input",renderMapInfo));
+  setInterval(()=>{if(state.page==="map")tick()},30000);
+  renderMapInfo();
+}
 
 function signedAngleDifference(a,b){return ((a-b+540)%360)-180}
 function updateTeodolite(){
@@ -1222,7 +1402,7 @@ function bind(){
   $$('[data-action="open-location-settings"]').forEach(b=>b.addEventListener("click",()=>navigate("settings")));
   $$('[data-action="activate-compass"]').forEach(b=>b.addEventListener("click",activateCompass));
   $$('[data-action="refresh-map"]').forEach(b=>b.addEventListener("click",()=>{initEmbeddedMap();if(state.mapReady){updateMap();state.map.invalidateSize();state.map.setView([state.location.lat,state.location.lon],13)}}));
-  $$('[data-action="map-center-user"]').forEach(b=>b.addEventListener("click",()=>{if(!state.mapReady)initEmbeddedMap();if(state.mapReady)state.map.setView([state.location.lat,state.location.lon],13)}));
+  $$('[data-action="map-center-user"]').forEach(b=>b.addEventListener("click",()=>{if(!state.mapReady)initEmbeddedMap();if(state.mapReady)state.map.setView([state.location.lat,state.location.lon],13);requestLocation(false)}));
   $$('[data-action="map-show-kaaba"]').forEach(b=>b.addEventListener("click",()=>{if(!state.mapReady)initEmbeddedMap();if(state.mapReady)state.map.fitBounds([[state.location.lat,state.location.lon],[KAABA.lat,KAABA.lon]],{padding:[24,24],maxZoom:5})}));
   $$('[data-action="google-earth"]').forEach(b=>b.addEventListener("click",openGoogleEarth));
   $$('[data-action="simulate-sun"]').forEach(b=>b.addEventListener("click",simulateSunPosition));
@@ -1289,7 +1469,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   updateTeodolite();
   const simDate=$("#solarSimulationDate");if(simDate)simDate.value=localDateTimeValue();
   const simZone=$("#solarSimulationTimezone");if(simZone)simZone.value=String(state.settings.timezone);
-  renderObservationRecords();updateGoogleEarthLink();simulateSunPosition();
+  renderObservationRecords();updateGoogleEarthLink();simulateSunPosition();initMapAstronomy();
   applyLanguage();
   const alertsOn=localStorage.getItem("falakPrayerAlerts")==="true";
   const alertCheck=document.getElementById("prayerAlertsEnabled");if(alertCheck)alertCheck.checked=alertsOn;

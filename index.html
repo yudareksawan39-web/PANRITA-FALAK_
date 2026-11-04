@@ -249,10 +249,60 @@
 
           <!-- Map: embedded Leaflet + OpenStreetMap; no Google Cloud API key required -->
           <section class="page" id="page-map">
-            <div class="page-heading"><div><span class="eyebrow">PETA</span><h2>Peta Arah Kiblat</h2><p>Peta interaktif langsung di dalam Panrita Falak, menggunakan OpenStreetMap. Untuk tampilan citra satelit dan medan yang lebih detail, buka lokasi yang sama di Google Earth.</p></div><div class="button-row"><button class="secondary-btn" data-action="map-center-user">Lokasi Saya</button><button class="secondary-btn" data-action="map-show-kaaba">Lihat Ka’bah</button><button class="secondary-btn" data-action="refresh-map">Perbarui Peta</button><button class="primary-btn" data-action="google-earth">Buka di Google Earth ↗</button></div></div>
+            <div class="page-heading"><div><span class="eyebrow">PETA</span><h2>Peta Arah Kiblat</h2><p>Peta, nama wilayah, data astronomi, dan rincian rumus memakai satu koordinat yang sama dengan penanda peta.</p></div><div class="button-row"><button class="secondary-btn" data-action="map-center-user">Gunakan Lokasi Saya (GPS)</button><button class="secondary-btn" data-action="map-show-kaaba">Lihat Ka’bah</button><button class="secondary-btn" data-action="refresh-map">Perbarui Peta</button><button class="primary-btn" data-action="google-earth">Buka di Google Earth ↗</button></div></div>
             <div class="map-card card"><div id="map" class="map" aria-label="Peta interaktif. Ketuk lokasi yang ingin dipilih."></div><div id="mapNotice" class="map-notice">Memuat peta… Pastikan internet aktif.</div></div><p class="hint map-pick-hint">Pilih titik lokasi dengan mengetuk peta. Koordinat dan nama wilayah akan diperbarui sesuai titik yang kamu pilih.</p>
             <div class="map-summary card"><div><span>Arah Kiblat</span><b id="mapBearing">296.7°</b><small id="mapDirection">Barat Laut</small></div><div><span>Jarak ke Ka'bah</span><b id="mapDistance">-- km</b><small>Jarak lingkaran besar</small></div><div><span>Lokasi</span><b id="mapCoords">-4.0189, 119.6238</b><small>Koordinat pengamat</small></div></div>
-          </section>
+          
+            <div class="card mp-card" id="mapLocInfo">
+              <h3>Informasi lokasi</h3>
+              <div class="mp-table" role="table">
+                <div><span>Sumber lokasi</span><b id="mpSource">--</b></div>
+                <div><span>Nama tempat</span><b id="mpPlaceName">--</b></div>
+                <div><span>Desa/kelurahan</span><b id="mpVillage">--</b></div>
+                <div><span>Kecamatan</span><b id="mpDistrict">--</b></div>
+                <div><span>Kabupaten/kota</span><b id="mpRegency">--</b></div>
+                <div><span>Provinsi</span><b id="mpProvince">--</b></div>
+                <div><span>Negara</span><b id="mpCountry">--</b></div>
+                <div><span>Lintang (latitude)</span><b id="mpLat">--</b></div>
+                <div><span>Bujur (longitude)</span><b id="mpLon">--</b></div>
+                <div><span>Ketinggian tempat</span><b id="mpElev">--</b></div>
+                <div><span>Akurasi GPS</span><b id="mpAccuracy">--</b></div>
+              </div>
+              <p class="hint" id="mpGeoStatus">Nama wilayah belum dicari.</p>
+            </div>
+            <div class="card mp-card">
+              <h3>Waktu pengamatan</h3>
+              <div class="theodolite-input-grid">
+                <label>Tanggal dan waktu lokal<input id="mpDate" type="datetime-local"></label>
+                <label>Zona waktu<select id="mpTimezone"><option value="7">WIB (UTC+7)</option><option value="8">WITA (UTC+8)</option><option value="9">WIT (UTC+9)</option><option value="0">UTC</option></select></label>
+              </div>
+              <div class="button-row"><button class="secondary-btn" data-action="mp-now">Gunakan waktu sekarang</button></div>
+              <p class="hint" id="mpCalcNote">--</p>
+            </div>
+            <div class="card mp-card">
+              <h3>Data astronomi <span class="mp-badge theory">Teoritis (hisab)</span></h3>
+              <div class="mp-table" role="table">
+                <div><span>Azimut Matahari</span><b id="mpSunAz">--</b></div>
+                <div><span>Altitude Matahari</span><b id="mpSunAlt">--</b></div>
+                <div><span>Deklinasi Matahari</span><b id="mpSunDecl">--</b></div>
+                <div><span>Equation of Time</span><b id="mpEoT">--</b></div>
+                <div><span>Waktu Matahari sejati</span><b id="mpTST">--</b></div>
+                <div><span>Sudut jam Matahari</span><b id="mpHA">--</b></div>
+                <div><span>Arah kiblat</span><b id="mpQibla">--</b></div>
+                <div><span>Jarak ke Ka'bah</span><b id="mpDist">--</b></div>
+              </div>
+              <p class="hint">Nilai geometris pusat Matahari memakai pendekatan NOAA/Meeus tanpa koreksi refraksi. Ini nilai teoritis, bukan hasil ukur lapangan; bandingkan dengan alat terkalibrasi dan ephemeris resmi untuk pekerjaan presisi.</p>
+            </div>
+            <div class="card mp-card">
+              <h3>Masukan pengamatan lapangan <span class="mp-badge field">Pengamatan lapangan</span></h3>
+              <div class="theodolite-input-grid">
+                <label>Bacaan alat ke Matahari, R (°)<input id="mpSunReading" type="number" min="0" max="360" step="0.001" placeholder="Opsional, 0–360"></label>
+                <label>Tinggi gnomon, g (m)<input id="mpGnomonH" type="number" min="0.01" step="0.01" value="1"></label>
+                <label>Jari-jari lingkaran bayangan, r (m)<input id="mpCircleR" type="number" min="0.01" step="0.01" value="1"></label>
+              </div>
+            </div>
+            <div class="card mp-card"><h3>Detail perhitungan</h3><p class="hint">Setiap hasil menampilkan rumus, substitusi angka, hasil, dan satuan. Buka tiap bagian untuk melihat langkahnya.</p><div id="mapCalcDetails"></div></div>
+</section>
 
           <!-- Prayer -->
           <section class="page" id="page-prayer">

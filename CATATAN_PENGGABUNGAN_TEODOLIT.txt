@@ -12,3 +12,16 @@ PANRITA FALAK - CATATAN PENGGABUNGAN
    Daftar ayat ada di akhir script.js (blok "Ayat sampul"); mudah ditambah/diubah.
 5. Halaman Beranda, Kiblat, dan Peta tetap menampilkan kiblat dalam desimal seperti file pertama.
 Belum diuji langsung di HP: uji di perangkat sebelum dipakai.
+
+PEMBARUAN LOKASI & PETA
+1. "Gunakan Lokasi Saya" (GPS) dan ketukan pada peta memakai satu alur: koordinat langsung dipakai semua halaman
+   (Beranda, Kiblat, Matahari, Teodolit, Peta, penanda peta), lalu nama wilayah dicari lewat reverse geocoding
+   OpenStreetMap (Nominatim): desa/kelurahan, kecamatan, kabupaten/kota, provinsi, negara.
+2. Jika internet putus, koordinat tetap dipakai dan muncul keterangan bahwa nama wilayah belum diperoleh.
+3. Halaman Peta kini memuat: informasi lokasi, waktu pengamatan (tanggal, jam, zona waktu), data astronomi
+   (azimut, altitude, deklinasi, Equation of Time, waktu Matahari sejati, sudut jam, kiblat, jarak Ka'bah),
+   masukan pengamatan lapangan, dan "Detail perhitungan" (rumus, substitusi angka, hasil, satuan),
+   termasuk utara sejati (azimut Matahari + bacaan alat, serta gnomon dengan koreksi deklinasi).
+4. Nilai teoritis (hisab) dan hasil pengamatan lapangan diberi label berbeda.
+5. Catatan: nama desa/kecamatan bergantung pada kelengkapan data OpenStreetMap; layanan Nominatim publik
+   punya batas pemakaian wajar. Hitungan Matahari memakai pendekatan NOAA/Meeus tanpa refraksi.

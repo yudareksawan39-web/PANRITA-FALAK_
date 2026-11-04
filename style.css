@@ -352,3 +352,22 @@ body.dark .bottom-nav{background:rgba(6,20,39,.97)!important;border-color:rgba(2
 .splash-content{margin:0!important;background:linear-gradient(145deg,rgba(5,22,48,.27),rgba(4,18,38,.42))!important;border-color:rgba(255,255,255,.22);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 .app-mark{background:rgba(255,255,255,.82)!important;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 .quote{background:rgba(255,255,255,.045)!important}
+
+/* ===== Halaman Peta: informasi lokasi & perhitungan ===== */
+.mp-card{display:grid;gap:12px;margin-top:14px}.mp-card h3{margin:0}
+.mp-table{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.mp-table>div{display:grid;gap:3px;padding:10px 12px;border-radius:12px;background:rgba(13,107,98,.08);min-width:0}
+.mp-table span{font-size:.8rem;opacity:.75}.mp-table b{overflow-wrap:anywhere;font-size:.98rem}
+.mp-badge{display:inline-block;font-size:.68rem;font-weight:700;letter-spacing:.02em;padding:2px 8px;border-radius:999px;vertical-align:middle;margin-left:4px}
+.mp-badge.theory{background:rgba(13,107,98,.16);color:#0d6b62}.mp-badge.field{background:rgba(196,154,54,.2);color:#8a6512}
+.dark .mp-badge.theory{background:rgba(94,200,185,.18);color:#8fe0d3}.dark .mp-badge.field{background:rgba(226,196,127,.2);color:#e6cd8c}
+.dark .mp-table>div{background:#0c1b2d}
+.mp-block{border:1px solid rgba(128,150,170,.3);border-radius:14px;padding:4px 12px;margin-top:10px}
+.mp-block summary{cursor:pointer;font-weight:700;padding:10px 0;line-height:1.4}
+.mp-block h4{margin:12px 0 6px}
+.mp-step{display:grid;gap:6px;padding:10px 0;border-top:1px dashed rgba(128,150,170,.35)}
+.mp-step>div{display:grid;gap:2px;min-width:0}.mp-step small{opacity:.7;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em}
+.mp-step code{white-space:normal;overflow-wrap:anywhere;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.84rem;line-height:1.5}
+.mp-step strong{overflow-wrap:anywhere}
+.mp-proc{margin:8px 0 4px;padding-left:20px;line-height:1.6;font-size:.9rem}
+@media(max-width:560px){.mp-table{grid-template-columns:1fr}}
