@@ -204,25 +204,52 @@ function setLocation(lat,lon,elevation=50,name=getLocationName(lat,lon),place,so
   updateGoogleEarthLink();
   if($("#page-theodolite")) updateTeodolite();
 }
-async function reverseGeocodePlace(lat,lon){
-  // Reverse geocoding OpenStreetMap (Nominatim): koordinat -> nama wilayah administratif.
-  const url=`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1&accept-language=id`;
+async function geoFetchJson(url,ms=10000){
   const ctl=typeof AbortController!=="undefined"?new AbortController():null;
-  const timer=ctl?setTimeout(()=>ctl.abort(),12000):null;
-  let response;
-  try{response=await fetch(url,{headers:{"Accept":"application/json"},signal:ctl?ctl.signal:undefined});}
-  finally{if(timer)clearTimeout(timer);}
-  if(!response.ok)throw new Error("Layanan peta tidak merespons");
-  const data=await response.json(),a=data.address||{};
+  const timer=ctl?setTimeout(()=>ctl.abort(),ms):null;
+  try{
+    const response=await fetch(url,{headers:{"Accept":"application/json"},signal:ctl?ctl.signal:undefined});
+    if(!response.ok)throw new Error("HTTP "+response.status);
+    return await response.json();
+  }catch(e){
+    throw new Error(e&&e.name==="AbortError"?"waktu habis":((e&&e.message)||"gagal"));
+  }finally{if(timer)clearTimeout(timer);}
+}
+async function geocodeNominatim(lat,lon){
+  const data=await geoFetchJson(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1&accept-language=id`);
+  const a=data.address||{};
   const village=a.village||a.hamlet||a.neighbourhood||a.quarter||(a.city_district||a.municipality?a.suburb:"")||"";
   const district=a.city_district||a.municipality||(a.suburb&&a.suburb!==village?a.suburb:"")||"";
   const regency=a.city||a.county||a.regency||a.town||a.state_district||"";
   const province=a.state||a.region||"";
   const country=a.country||"";
-  const placeName=data.name||a.road||village||district||"";
-  if(!regency&&!province&&!country&&!data.display_name)throw new Error("Nama wilayah tidak tersedia");
-  return {status:"ok",placeName,village,district,regency,province,country,display:data.display_name||"",
-    short:regency&&province?`${regency}, ${province}`:(data.display_name?data.display_name.split(",").slice(0,3).join(", "):"")};
+  if(!regency&&!province&&!country&&!data.display_name)throw new Error("data kosong");
+  return {provider:"OpenStreetMap (Nominatim)",placeName:data.name||a.road||village||district||"",village,district,regency,province,country,display:data.display_name||""};
+}
+async function geocodeBigDataCloud(lat,lon){
+  // Cadangan: layanan reverse geocoding untuk klien (tanpa API key).
+  const data=await geoFetchJson(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&localityLanguage=id`);
+  const adm=(data.localityInfo&&data.localityInfo.administrative)||[];
+  const byLevel=l=>{const x=adm.find(e=>Number(e.adminLevel)===l);return x?x.name:""};
+  const clean=s=>String(s||"").replace(/^(Kecamatan|Kelurahan|Desa)\s+/i,"");
+  const province=data.principalSubdivision||byLevel(4)||"";
+  const regency=byLevel(5)||data.city||"";
+  const district=clean(byLevel(6));
+  const village=clean(byLevel(7)||byLevel(8)||data.locality||"");
+  const country=data.countryName||byLevel(2)||"";
+  if(!regency&&!province&&!country)throw new Error("data kosong");
+  return {provider:"BigDataCloud",placeName:data.locality||village||"",village,district,regency,province,country,display:""};
+}
+async function reverseGeocodePlace(lat,lon){
+  const errors=[];
+  for(const fn of [geocodeNominatim,geocodeBigDataCloud]){
+    try{
+      const p=await fn(lat,lon);
+      const short=p.regency&&p.province?`${p.regency}, ${p.province}`:(p.display?p.display.split(",").slice(0,3).join(", "):[p.regency,p.province,p.country].filter(Boolean).join(", "));
+      return {status:"ok",...p,short};
+    }catch(e){errors.push(`${fn===geocodeNominatim?"OpenStreetMap":"BigDataCloud"}: ${(e&&e.message)||"gagal"}`);}
+  }
+  throw new Error(errors.join("; "));
 }
 async function reverseGeocodeLocation(lat,lon){const p=await reverseGeocodePlace(lat,lon);return p.short;}
 window.FALAK_REVERSE_GEOCODE=reverseGeocodeLocation;
@@ -563,7 +590,7 @@ function renderMapInfo(){
   set("mpLat",loc.lat.toFixed(6)+"°");set("mpLon",loc.lon.toFixed(6)+"°");
   set("mpElev",Number.isFinite(loc.elevation)?loc.elevation.toFixed(1)+" m":dash);
   set("mpAccuracy",loc.source==="gps"&&Number.isFinite(loc.accuracy)?"±"+Math.round(loc.accuracy)+" m (dilaporkan perangkat)":dash);
-  set("mpGeoStatus",!pl?"Nama wilayah belum dicari. Tekan “Lokasi Saya” atau ketuk peta.":pl.status==="loading"?"Mencari nama wilayah dari OpenStreetMap…":ok?"Nama wilayah diperoleh dari OpenStreetMap (reverse geocoding). Desa/kelurahan dan kecamatan bergantung pada kelengkapan data peta; tanda — berarti tidak tersedia.":"Nama wilayah belum berhasil diperoleh ("+(pl.message||"tanpa internet")+"). Koordinat tetap dipakai untuk semua perhitungan.");
+  set("mpGeoStatus",!pl?"Nama wilayah belum dicari. Tekan “Lokasi Saya” atau ketuk peta.":pl.status==="loading"?"Mencari nama wilayah dari OpenStreetMap…":ok?"Nama wilayah diperoleh dari "+(pl.provider||"layanan peta")+" (reverse geocoding). Desa/kelurahan dan kecamatan bergantung pada kelengkapan data peta; tanda — berarti tidak tersedia.":"Nama wilayah belum berhasil diperoleh. Penyebab: "+(pl.message||"tanpa internet")+". Koordinat tetap dipakai untuk semua perhitungan. Periksa internet/izin INTERNET aplikasi lalu tekan “Cari ulang nama wilayah”.");
   const c=computeMapAstronomy();
   const qb=qiblaBearing(loc.lat,loc.lon),dist=distanceKm(loc.lat,loc.lon);
   if(!c){set("mpCalcNote","Isi tanggal dan waktu pengamatan yang valid.");return;}
@@ -664,6 +691,7 @@ function initMapAstronomy(){
   dateEl?.addEventListener("input",()=>{state.mpLive=false;renderMapInfo()});
   zoneSel?.addEventListener("change",()=>{if(state.mpLive&&dateEl)dateEl.value=nowInZone(zone());renderMapInfo()});
   $$('[data-action="mp-now"]').forEach(b=>b.addEventListener("click",()=>{state.mpLive=true;tick()}));
+  $$('[data-action="mp-regeocode"]').forEach(b=>b.addEventListener("click",()=>{applyObserverLocation(state.location.lat,state.location.lon,{source:state.location.source==="manual"?"map":state.location.source,accuracy:state.gpsAccuracy,silent:false})}));
   ["mpGnomonH","mpCircleR","mpSunReading"].forEach(id=>$("#"+id)?.addEventListener("input",renderMapInfo));
   setInterval(()=>{if(state.page==="map")tick()},30000);
   renderMapInfo();
