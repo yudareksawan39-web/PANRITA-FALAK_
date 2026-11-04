@@ -18,7 +18,6 @@ const state = {
   qiblaLine:null,
   userMarker:null,
   kaabaMarker:null,
-  cameraStream:null,
   gpsAccuracy:null,
   settings:{
     method:"auto", fajr:20, isha:18, asrFactor:1, timezone:deviceTimezone()
@@ -44,7 +43,10 @@ function deviceTimezoneName(offset=deviceTimezone()){
 }
 
 function formatDate(d, opts={dateStyle:"long"}) {
-  return new Intl.DateTimeFormat("id-ID",{...opts,timeZone:"Asia/Makassar"}).format(d);
+  const zone=Number.isFinite(Number(state.settings?.timezone))?Number(state.settings.timezone):deviceTimezone();
+  const deviceOffset=-d.getTimezoneOffset()/60;
+  const shifted=new Date(d.getTime()+(zone-deviceOffset)*3600000);
+  return new Intl.DateTimeFormat("id-ID",{...opts,timeZone:"UTC"}).format(shifted);
 }
 function formatTime(h) {
   if (!Number.isFinite(h)) return "Tidak terdefinisi";
@@ -286,7 +288,6 @@ function requestLocation(silent=false){
 }
 
 function navigate(page){
-  if(state.page==="theodolite" && page!=="theodolite") stopTheodoliteCamera();
   state.page=page;
   $$(".page").forEach(p=>p.classList.toggle("active",p.id===`page-${page}`));
   $$(".nav-item[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
@@ -371,6 +372,7 @@ let compassHandler=null;
 let compassEventName=null;
 let compassFallbackTimer=null;
 let lastRawHeading=null;
+let lastCompassUpdate=0;
 
 function shortestAngleDelta(from,to){
   return ((to-from+540)%360)-180;
@@ -378,10 +380,14 @@ function shortestAngleDelta(from,to){
 
 function smoothCompassHeading(raw){
   raw=norm360(raw);
-  if(!Number.isFinite(state.sensorHeading)) return raw;
+  const now=performance.now();
+  if(!Number.isFinite(state.sensorHeading)){lastCompassUpdate=now;return raw;}
   const delta=shortestAngleDelta(state.sensorHeading,raw);
-  // Smoothing circular: tidak meloncat saat melewati 359° -> 0°.
-  return norm360(state.sensorHeading + delta*0.18);
+  // Filter melingkar: tetap stabil saat melewati 359° ke 0° dan lebih responsif saat bergerak cepat.
+  const elapsed=Math.max(16,now-(lastCompassUpdate||now));
+  const alpha=Math.min(0.48,Math.max(0.12,1-Math.exp(-elapsed/260)));
+  lastCompassUpdate=now;
+  return norm360(state.sensorHeading + delta*alpha);
 }
 
 function stopCompassListener(){
@@ -401,9 +407,12 @@ function readHeading(event){
 
   if(typeof event.alpha !== "number" || !Number.isFinite(event.alpha)) return null;
 
-  // Untuk sensor absolut, alpha dihitung sebagai sudut searah jarum jam
-  // dari utara pada implementasi yang digunakan aplikasi ini.
-  return norm360(360-event.alpha);
+  // Fallback standar: koreksi sudut orientasi layar (portrait/landscape).
+  // webkitCompassHeading di atas tetap diprioritaskan karena sudah dikoreksi perangkat.
+  const screenAngle=Number.isFinite(window.screen?.orientation?.angle)
+    ? window.screen.orientation.angle
+    : (Number.isFinite(window.orientation) ? window.orientation : 0);
+  return norm360(360-event.alpha+screenAngle);
 }
 
 function handleOrientation(event){
@@ -419,7 +428,7 @@ function handleOrientation(event){
   const textEl=$("#sensorText");
   if(status) status.textContent="Sensor aktif";
   if(headingEl) headingEl.textContent=state.sensorHeading.toFixed(1)+"°";
-  if(textEl) textEl.textContent="Utara sensor terbaca. Arahkan bagian atas perangkat.";
+  if(textEl) textEl.textContent="Arah sensor terbaca. Jauhkan dari logam/magnet dan kalibrasikan perangkat bila bacaan tidak stabil.";
 
   // HANYA jarum kiblat yang bergerak mengikuti heading HP.
   // Lingkaran kompas tidak diputar lagi sehingga heading tidak diterapkan dua kali.
@@ -433,6 +442,7 @@ async function activateCompass(){
   stopCompassListener();
   state.sensorHeading=null;
   lastRawHeading=null;
+  lastCompassUpdate=0;
 
   try{
     if(typeof DeviceOrientationEvent === "undefined"){
@@ -774,7 +784,33 @@ function simulateSunPosition(){
   const put=(id,val)=>{const el=$("#"+id);if(el)el.textContent=val;};
   put("simSunAz",formatDMS(sp.azimuth)+` (${sp.azimuth.toFixed(3)}°)`);put("simSunAlt",formatDMS(sp.altitude,true)+` (${sp.altitude.toFixed(3)}°)`);put("simSunDecl",formatDMS(sp.decl,true)+` (${sp.decl.toFixed(3)}°)`);
   put("simSunState",sp.altitude>0?"Di atas horizon":sp.altitude<0?"Di bawah horizon":"Di horizon");
-  if(note)note.textContent=`Lokasi ${state.location.lat.toFixed(5)}°, ${state.location.lon.toFixed(5)}°; waktu lokal yang dimasukkan menggunakan UTC${zone>=0?"+":""}${zone}. Hasil merupakan prediksi geometris, bukan pembacaan sensor.`;
+  // Sinkronkan simulasi dengan kalkulator utara sejati tanpa menimpa input manual pengguna.
+  const trueNorthAzInput=$("#trueNorthSunAz");
+  if(trueNorthAzInput && (!trueNorthAzInput.value.trim() || trueNorthAzInput.dataset.autoFilled==="true") && trueNorthAzInput.dataset.userEdited!=="true"){
+    trueNorthAzInput.value=sp.azimuth.toFixed(3);
+    trueNorthAzInput.dataset.autoFilled="true";
+    const hour=tparts[0]+tparts[1]/60;
+    const timeSelect=$("#trueNorthTime");
+    const declSelect=$("#trueNorthDeclination");
+    if(timeSelect)timeSelect.value=hour<12?"morning":"afternoon";
+    if(declSelect)declSelect.value=sp.decl>=0?"north":"south";
+    calculateTrueNorth();
+  }
+  if(note)note.textContent=`Lokasi ${state.location.name||"pengamat"} (${state.location.lat.toFixed(5)}°, ${state.location.lon.toFixed(5)}°); waktu lokal UTC${zone>=0?"+":""}${zone}. Hasil merupakan prediksi geometris, bukan pembacaan sensor.`;
+  const details=$("#simSunDetails");
+  if(details){
+    const localClock=`${String(tparts[0]).padStart(2,"0")}:${String(tparts[1]).padStart(2,"0")}`;
+    const signed=v=>(v>=0?"+":"")+v.toFixed(4);
+    details.innerHTML=`<h4>Rincian perhitungan astronomis</h4>
+      <div class="formula-row"><b>Julian Day (JD)</b><span>${sp.jd.toFixed(6)}</span><small>JD = (waktu UTC dalam milidetik ÷ 86.400.000) + 2.440.587,5</small></div>
+      <div class="formula-row"><b>Deklinasi Matahari (δ)</b><span>${sp.decl.toFixed(6)}°</span><small>Dari bujur ekliptika tampak dan kemiringan ekliptika (model NOAA).</small></div>
+      <div class="formula-row"><b>Equation of Time (E)</b><span>${sp.eqTime.toFixed(4)} menit</span><small>Koreksi selisih waktu Matahari tampak terhadap Matahari rata-rata.</small></div>
+      <div class="formula-row"><b>Waktu Matahari Sejati (TST)</b><span>${(sp.tst/60).toFixed(4)} jam</span><small>TST = waktu lokal + E + (4 × bujur) − (60 × zona waktu).</small><small>Substitusi: ${localClock} + (${signed(sp.eqTime)}) + (4 × ${state.location.lon.toFixed(5)}) − (60 × ${zone}) menit = ${sp.tst.toFixed(3)} menit.</small></div>
+      <div class="formula-row"><b>Sudut Jam (H)</b><span>${sp.ha.toFixed(6)}°</span><small>H = TST ÷ 4 − 180° = ${sp.tst.toFixed(3)} ÷ 4 − 180°.</small></div>
+      <div class="formula-row"><b>Azimut Matahari</b><span>${sp.azimuth.toFixed(6)}°</span><small>Dari utara sejati searah jarum jam; dihitung dari lintang, deklinasi, dan sudut jam.</small></div>
+      <div class="formula-row"><b>Tinggi Matahari (h)</b><span>${sp.altitude.toFixed(6)}°</span><small>sin(h) = sin(φ)sin(δ) + cos(φ)cos(δ)cos(H), φ = ${state.location.lat.toFixed(5)}°.</small></div>
+      <p class="hint">Sudut dalam derajat. Model tidak memasukkan refraksi atmosfer, paralaks, dan elevasi horizon.</p>`;
+  }
 }
 function getObservationRecords(){
   try{const parsed=JSON.parse(localStorage.getItem("panritaFalakObservations")||"[]");return Array.isArray(parsed)?parsed:[]}catch{return []}
@@ -830,37 +866,6 @@ function updateGoogleEarthLink(){
   const btn=$('[data-action="google-earth"]');if(btn){btn.title=`Buka koordinat ${state.location.lat.toFixed(5)}, ${state.location.lon.toFixed(5)} di Google Earth`;}
 }
 
-async function startTheodoliteCamera(){
-  const video=$("#theodoliteVideo"),placeholder=$("#cameraPlaceholder"),status=$("#cameraStatus");
-  if(!navigator.mediaDevices?.getUserMedia){if(status)status.textContent="Kamera tidak tersedia. Pastikan izin kamera Android aktif dan aplikasi dibuka melalui WebView yang mendukung kamera.";return;}
-  try{
-    if(state.cameraStream)state.cameraStream.getTracks().forEach(t=>t.stop());
-    const attempts=[
-      {video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false},
-      {video:{facingMode:"environment"},audio:false},
-      {video:true,audio:false}
-    ];
-    let stream=null,lastError=null;
-    for(const constraints of attempts){try{stream=await navigator.mediaDevices.getUserMedia(constraints);break;}catch(e){lastError=e;}}
-    if(!stream)throw lastError||new Error("Tidak ada kamera yang tersedia.");
-    state.cameraStream=stream;video.setAttribute("playsinline","");video.setAttribute("autoplay","");video.muted=true;video.srcObject=stream;
-    await new Promise((resolve,reject)=>{if(video.readyState>=2){resolve();return;}const timer=setTimeout(()=>resolve(),2500);video.onloadedmetadata=()=>{clearTimeout(timer);resolve();};video.onerror=()=>{clearTimeout(timer);reject(new Error("Pratinjau kamera gagal dimuat."));};});
-    await video.play();video.classList.add("is-live");if(placeholder)placeholder.style.display="none";
-    const track=stream.getVideoTracks()[0],settings=track?.getSettings?.()||{};
-    if(status)status.textContent=`Kamera aktif${settings.facingMode==="environment"?" (belakang)":""}. Penanda hanya panduan visual.`;
-  }catch(err){if(state.cameraStream)state.cameraStream.getTracks().forEach(t=>t.stop());state.cameraStream=null;if(video)video.srcObject=null;if(status)status.textContent="Kamera gagal dibuka: "+(err.name==="NotAllowedError"?"izin kamera ditolak. Aktifkan izin Kamera pada pengaturan Android.":err.name==="NotFoundError"?"kamera tidak ditemukan pada perangkat.":err.message||"periksa izin kamera dan pengaturan APK.");console.warn("Kamera Teodolit Falak:",err);}
-}
-function stopTheodoliteCamera(){if(state.cameraStream)state.cameraStream.getTracks().forEach(t=>t.stop());state.cameraStream=null;const v=$("#theodoliteVideo"),p=$("#cameraPlaceholder");if(v){v.pause();v.srcObject=null;v.classList.remove("is-live")}if(p)p.style.display="grid";const s=$("#cameraStatus");if(s)s.textContent="Kamera dimatikan"}
-
-function renderPrayer(){
-  const d=state.selectedDate,t=prayerTimes(d);
-  $("#selectedDate").textContent=formatDate(d); $("#prayerDateLabel").textContent=formatDate(d,{dateStyle:"full"});
-  $("#prayerMethodLabel").textContent=state.settings.method==="auto"?`Otomatis berdasarkan lokasi (${effectivePrayerMethod()==="kemenag"?"Kemenag RI":"Muslim World League"})`:$("#methodSelect").selectedOptions[0].textContent;
-  $("#prayerZoneLabel").textContent=timezoneLabel();
-  const rows=[["Imsak",t.imsak,"☾"],["Subuh",t.fajr,"☾"],["Terbit",t.sunrise,"☀"],["Zuhur",t.zuhur,"◉"],["Asar",t.asr,"◒"],["Maghrib",t.maghrib,"◐"],["Isya",t.isha,"☾"]];
-  const next=nextPrayerData(d);
-  $("#prayerGrid").innerHTML=rows.map(([name,time,icon])=>`<div class="prayer-item card ${next.name===name?"next":""}"><div class="picon">${icon}</div><div><small>${name}</small><strong>${formatTime(time)}</strong></div></div>`).join("");
-}
 function timezoneLabel(){return state.settings.timezone===7?"WIB (UTC+7)":state.settings.timezone===9?"WIT (UTC+9)":state.settings.timezone===8?"WITA (UTC+8)":"UTC"}
 function renderMonthly(){
   const y=state.currentMonth.getFullYear(),m=state.currentMonth.getMonth();
@@ -1141,7 +1146,8 @@ function saveSettings(){
   state.settings.fajr=Number($("#fajrAngle").value)||18;
   state.settings.isha=Number($("#ishaAngle").value)||18;
   state.settings.asrFactor=Number($('input[name="asr"]:checked').value)||1;
-  state.settings.timezone=Number($("#timezoneSelect").value)||8;
+  const selectedTimezone=Number($("#timezoneSelect").value);
+  state.settings.timezone=Number.isFinite(selectedTimezone)?selectedTimezone:deviceTimezone();
   state.location.name=$("#locationNameInput").value||getLocationName(state.location.lat,state.location.lon);
   updateAll();renderPrayer();renderMonthly();
   if(state.page==="calc"){const active=$(".formula-tab.active");if(active)renderFormula(active.dataset.formula)}
@@ -1435,7 +1441,13 @@ function bind(){
   $$('[data-action="google-earth"]').forEach(b=>b.addEventListener("click",openGoogleEarth));
   $$('[data-action="simulate-sun"]').forEach(b=>b.addEventListener("click",simulateSunPosition));
   $$('[data-action="true-north-calc"]').forEach(b=>b.addEventListener("click",calculateTrueNorth));
-  ["trueNorthSunAz","trueNorthTime","trueNorthDeclination"].forEach(id=>$("#"+id)?.addEventListener("change",calculateTrueNorth));
+  $("#trueNorthSunAz")?.addEventListener("input",()=>{
+    const input=$("#trueNorthSunAz");
+    input.dataset.userEdited="true";
+    input.dataset.autoFilled="false";
+    calculateTrueNorth();
+  });
+  ["trueNorthTime","trueNorthDeclination"].forEach(id=>$("#"+id)?.addEventListener("change",calculateTrueNorth));
   $$('[data-action="use-current-sun-time"]').forEach(b=>b.addEventListener("click",()=>{simulationManuallyEdited=false;$("#solarSimulationDate").value=localDateTimeValue();$("#solarSimulationTimezone").value=String(state.settings.timezone);simulateSunPosition()}));
   $("#solarSimulationDate")?.addEventListener("input",()=>{simulationManuallyEdited=true;simulateSunPosition()});
   $("#solarSimulationTimezone")?.addEventListener("change",()=>{simulationManuallyEdited=true;simulateSunPosition()});
@@ -1443,8 +1455,6 @@ function bind(){
   $$('[data-action="save-observation"]').forEach(b=>b.addEventListener("click",saveObservation));
   $$('[data-action="export-observation-report"]').forEach(b=>b.addEventListener("click",exportObservationReport));
   $$('[data-action="clear-observations"]').forEach(b=>b.addEventListener("click",clearObservations));
-  $$('[data-action="camera-start"]').forEach(b=>b.addEventListener("click",startTheodoliteCamera));
-  $$('[data-action="camera-stop"]').forEach(b=>b.addEventListener("click",stopTheodoliteCamera));
   $$('[data-action="theodolite-gps"]').forEach(b=>b.addEventListener("click",()=>requestLocation(false)));
   $$('[data-action="theodolite-sensor"]').forEach(b=>b.addEventListener("click",activateCompass));
   $$('[data-action="theodolite-calc"]').forEach(b=>b.addEventListener("click",calculateTheodolite));
