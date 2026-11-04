@@ -352,3 +352,35 @@ body.dark .bottom-nav{background:rgba(6,20,39,.97)!important;border-color:rgba(2
 .splash-content{margin:0!important;background:linear-gradient(145deg,rgba(5,22,48,.27),rgba(4,18,38,.42))!important;border-color:rgba(255,255,255,.22);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 .app-mark{background:rgba(255,255,255,.82)!important;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 .quote{background:rgba(255,255,255,.045)!important}
+
+/* Perbaikan kontras kalender Rashdul Kiblat saat mode malam aktif. */
+body.dark .rashdul-calendar,
+body.dark .rashdul-calendar .rashdul-calendar-head,
+body.dark .rashdul-calendar .rashdul-upcoming { color: #eef4ff; }
+body.dark .rashdul-calendar .rashdul-weekday { color: #b8c8dc; opacity: 1; }
+body.dark .rashdul-calendar .rashdul-day {
+  background: #102943 !important;
+  color: #f3f6fc !important;
+  border-color: #34516c !important;
+}
+body.dark .rashdul-calendar .rashdul-day.today {
+  box-shadow: inset 0 0 0 2px #e0bf73;
+  border-color: #e0bf73 !important;
+}
+body.dark .rashdul-calendar .rashdul-day.selected {
+  background: linear-gradient(135deg, #b99b54, #e6d39a) !important;
+  color: #142238 !important;
+  border-color: #e6d39a !important;
+  font-weight: 800;
+}
+body.dark .rashdul-calendar .rashdul-day.empty {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+body.dark .rashdul-calendar .rashdul-upcoming-item {
+  background: #102943 !important;
+  color: #eef4ff !important;
+  border-color: #34516c !important;
+}
+body.dark .rashdul-calendar .rashdul-caveat,
+body.dark .rashdul-calendar .rashdul-calendar-head p { color: #b8c8dc; opacity: 1; }
