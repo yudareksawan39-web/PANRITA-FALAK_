@@ -1,3 +1,9 @@
+function formatDMS(value, signed=false){
+  if(!Number.isFinite(value)) return "--";
+  const sign=value<0?"−":""; let total=Math.round(Math.abs(value)*3600);
+  const d=Math.floor(total/3600); total-=d*3600; const m=Math.floor(total/60); const s=total-m*60;
+  return `${signed?sign:""}${d}° ${String(m).padStart(2,"0")}′ ${String(s).padStart(2,"0")}″`;
+}
 (() => {
 "use strict";
 
@@ -68,12 +74,6 @@ function distanceKm(lat1,lon1,lat2=KAABA.lat,lon2=KAABA.lon){
 function cardinal(b){
   const dirs=["Utara","Timur Laut","Timur","Tenggara","Selatan","Barat Daya","Barat","Barat Laut"];
   return dirs[Math.round(norm360(b)/45)%8];
-}
-function formatDMS(value, signed=false){
-  if(!Number.isFinite(value)) return "--";
-  const sign=value<0?"−":""; let total=Math.round(Math.abs(value)*3600);
-  const d=Math.floor(total/3600); total-=d*3600; const m=Math.floor(total/60); const s=total-m*60;
-  return `${signed?sign:""}${d}° ${String(m).padStart(2,"0")}′ ${String(s).padStart(2,"0")}″`;
 }
 
 function dayOfYear(date){
@@ -193,7 +193,6 @@ function getLocationName(lat,lon){
 }
 function setLocation(lat,lon,elevation=50,name=getLocationName(lat,lon)){
   state.location={...state.location,lat:Number(lat),lon:Number(lon),elevation:Number(elevation)||0,name};
-  window.FALAK_HILAL_LOCATION={lat:state.location.lat,lon:state.location.lon,name:state.location.name,accuracy:state.gpsAccuracy||undefined};
   $("#latInput").value=state.location.lat; $("#lonInput").value=state.location.lon; $("#elevInput").value=state.location.elevation;
   updateAll();
   if(state.page==="calc"){const active=$(".formula-tab.active");if(active)renderFormula(active.dataset.formula)}
@@ -201,16 +200,31 @@ function setLocation(lat,lon,elevation=50,name=getLocationName(lat,lon)){
   updateGoogleEarthLink();
   if($("#page-theodolite")) updateTeodolite();
 }
+async function reverseGeocodeLocation(lat,lon){
+  // Reverse geocoding: konversi koordinat GPS menjadi nama wilayah administratif.
+  const url=`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`;
+  const response=await fetch(url,{headers:{"Accept":"application/json"}});
+  if(!response.ok)throw new Error("Layanan peta tidak merespons");
+  const data=await response.json(),a=data.address||{};
+  const kabupaten=a.city||a.town||a.municipality||a.county||a.state_district||a.village||a.suburb;
+  const provinsi=a.state||a.region;
+  if(kabupaten&&provinsi)return `${kabupaten}, ${provinsi}`;
+  if(data.display_name)return data.display_name.split(",").slice(0,3).join(", ");
+  throw new Error("Nama wilayah tidak tersedia");
+}
+window.FALAK_REVERSE_GEOCODE=reverseGeocodeLocation;
 function requestLocation(silent=false){
   if(!navigator.geolocation){if(!silent)alert("Perangkat atau browser ini tidak menyediakan GPS.");return;}
-  navigator.geolocation.getCurrentPosition(pos=>{
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const lat=pos.coords.latitude,lon=pos.coords.longitude;
     state.gpsAccuracy=Number.isFinite(pos.coords.accuracy)?pos.coords.accuracy:null;
-    const name=`Lokasi perangkat (${pos.coords.latitude.toFixed(4)}°, ${pos.coords.longitude.toFixed(4)}°)`;
-    setLocation(pos.coords.latitude,pos.coords.longitude,pos.coords.altitude||state.location.elevation,name);
+    let name=`Koordinat GPS (${lat.toFixed(6)}°, ${lon.toFixed(6)}°)`;
+    try{name=await reverseGeocodeLocation(lat,lon);}catch(e){if(!silent)console.warn("Nama wilayah GPS belum dapat diperoleh:",e);}
+    setLocation(lat,lon,pos.coords.altitude||state.location.elevation,name);
     try{localStorage.setItem("falakLocation",JSON.stringify(state.location));}catch(e){}
     updateTeodolite();
-    if(window.FALAK_HILAL_REFRESH)window.FALAK_HILAL_REFRESH();
-  },err=>{if(!silent)alert("Lokasi perangkat tidak dapat diambil: "+err.message+". Anda tetap dapat memilih lokasi atau mencoba GPS lagi.");},{enableHighAccuracy:true,timeout:18000,maximumAge:60000});
+    if(!silent&&name.startsWith("Koordinat GPS"))alert("Koordinat GPS berhasil diambil, tetapi nama kota/provinsi belum tersedia. Pastikan internet aktif lalu coba lagi.");
+  },err=>{if(!silent)alert("Lokasi perangkat tidak dapat diambil: "+err.message+". Anda tetap dapat memilih lokasi atau mencoba GPS lagi.");},{enableHighAccuracy:true,timeout:18000,maximumAge:0});
 }
 
 function navigate(page){
@@ -232,10 +246,10 @@ function updateAll(){
   const loc=state.location.name;
   ["homeLocation","qiblaLocation","sunLocation","rashdulLocation"].forEach(id=>{const e=$("#"+id);if(e)e.textContent=loc});
   ["homeCoords","qiblaCoords"].forEach(id=>{const e=$("#"+id);if(e)e.textContent=`Lat ${state.location.lat.toFixed(4)}° • Lon ${state.location.lon.toFixed(4)}°`});
-  $("#homeQibla").textContent=formatDMS(b); $("#homeQiblaDir").textContent=cardinal(b);
-  $("#qiblaBearing").textContent=formatDMS(b); $("#qiblaDirection").textContent=cardinal(b);
-  $("#qiblaAzimuth").textContent=formatDMS(b); $("#qiblaCardinal").textContent=cardinal(b);
-  $("#mapBearing").textContent=formatDMS(b); $("#mapDirection").textContent=cardinal(b);
+  $("#homeQibla").textContent=b.toFixed(1)+"°"; $("#homeQiblaDir").textContent=cardinal(b);
+  $("#qiblaBearing").textContent=b.toFixed(1)+"°"; $("#qiblaDirection").textContent=cardinal(b);
+  $("#qiblaAzimuth").textContent=b.toFixed(1)+"°"; $("#qiblaCardinal").textContent=cardinal(b);
+  $("#mapBearing").textContent=b.toFixed(1)+"°"; $("#mapDirection").textContent=cardinal(b);
   $("#mapDistance").textContent=dist.toFixed(1)+" km"; $("#distanceMakkah").textContent=dist.toFixed(1)+" km";
   $("#mapCoords").textContent=`${state.location.lat.toFixed(4)}, ${state.location.lon.toFixed(4)}`;
   const next=nextPrayerData(new Date()); $("#nextPrayer").textContent=next.name; $("#nextPrayerTime").textContent=formatTime(next.time);
@@ -441,7 +455,18 @@ function initEmbeddedMap(){
   state.kaabaMarker=L.marker([KAABA.lat,KAABA.lon]).addTo(state.map).bindPopup("Ka'bah, Makkah");
   state.qiblaLine=L.polyline([center,[KAABA.lat,KAABA.lon]],{color:"#c49a36",weight:3,opacity:.9,dashArray:"8 8"}).addTo(state.map);
   state.mapReady=true;
-  const notice=$("#mapNotice");if(notice){notice.style.display="block";notice.textContent="Peta OpenStreetMap aktif. © OpenStreetMap contributors. Peta daring memerlukan internet.";}
+  const notice=$("#mapNotice");if(notice){notice.style.display="block";notice.textContent="Peta aktif. Ketuk titik mana pun untuk memilih lokasi; nama wilayah dan koordinat akan diperbarui.";}
+  // Ketukan pada peta memilih koordinat tersebut sebagai lokasi pengamat.
+  state.map.on("click", async (event)=>{
+    const lat=event.latlng.lat,lon=event.latlng.lng;
+    const notice=$("#mapNotice");
+    if(notice){notice.style.display="block";notice.textContent=`Mengambil nama lokasi untuk ${lat.toFixed(6)}, ${lon.toFixed(6)}…`;}
+    let name=`Titik peta (${lat.toFixed(6)}°, ${lon.toFixed(6)}°)`;
+    try{name=await reverseGeocodeLocation(lat,lon);}catch(error){console.warn("Nama lokasi titik peta tidak tersedia:",error);}
+    setLocation(lat,lon,state.location.elevation,name);
+    try{localStorage.setItem("falakLocation",JSON.stringify(state.location));}catch(error){}
+    if(notice){notice.style.display="block";notice.textContent=`Lokasi dipilih: ${name} · ${lat.toFixed(6)}, ${lon.toFixed(6)}. Ketuk peta untuk memilih titik lain.`;}
+  });
   updateMap();
 }
 function destinationPoint(lat,lon,bearingDeg,distanceKmValue){
@@ -509,6 +534,19 @@ function localDateTimeValue(date=new Date()){
   const pad2=n=>String(n).padStart(2,"0");
   return `${date.getFullYear()}-${pad2(date.getMonth()+1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
+function calculateTrueNorth(){
+  const a=Number($("#trueNorthSunAz")?.value), time=$("#trueNorthTime")?.value||"morning", dec=$("#trueNorthDeclination")?.value||"north";
+  const formula=$("#trueNorthFormula"), result=$("#trueNorthResult"), note=$("#trueNorthNote");
+  if(!Number.isFinite(a)||$("#trueNorthSunAz")?.value.trim()===""||a<0||a>360){if(result)result.textContent="--";if(note)note.textContent="Masukkan A berupa azimut Matahari antara 0° dan 360°.";return;}
+  let expression, raw;
+  if(dec==="north"){expression="360° − A";raw=360-a;}
+  else if(time==="morning"){expression="180° + A";raw=180+a;}
+  else {expression="180° − A";raw=180-a;}
+  const out=norm360(raw);
+  if(formula)formula.textContent=expression;
+  if(result)result.textContent=formatDMS(out)+` (${out.toFixed(3)}°)`;
+  if(note)note.textContent=`A = ${a.toFixed(3)}°. Substitusi: ${expression.replace("A",`(${a.toFixed(3)}°)`)} = ${raw.toFixed(3)}°; setelah normalisasi, utara sejati = ${out.toFixed(3)}°. Pastikan tanda deklinasi dan waktu pengamatan sesuai referensi metode yang digunakan.`;
+}
 function simulateSunPosition(){
   const dateValue=$("#solarSimulationDate")?.value;
   const zone=Number($("#solarSimulationTimezone")?.value);
@@ -529,19 +567,6 @@ function simulateSunPosition(){
   put("simSunAz",formatDMS(sp.azimuth)+` (${sp.azimuth.toFixed(3)}°)`);put("simSunAlt",formatDMS(sp.altitude,true)+` (${sp.altitude.toFixed(3)}°)`);put("simSunDecl",formatDMS(sp.decl,true)+` (${sp.decl.toFixed(3)}°)`);
   put("simSunState",sp.altitude>0?"Di atas horizon":sp.altitude<0?"Di bawah horizon":"Di horizon");
   if(note)note.textContent=`Lokasi ${state.location.lat.toFixed(5)}°, ${state.location.lon.toFixed(5)}°; waktu lokal yang dimasukkan menggunakan UTC${zone>=0?"+":""}${zone}. Hasil merupakan prediksi geometris, bukan pembacaan sensor.`;
-}
-function calculateTrueNorth(){
-  const a=Number($("#trueNorthSunAz")?.value), time=$("#trueNorthTime")?.value||"morning", dec=$("#trueNorthDeclination")?.value||"north";
-  const formula=$("#trueNorthFormula"), result=$("#trueNorthResult"), note=$("#trueNorthNote");
-  if(!Number.isFinite(a)||$("#trueNorthSunAz")?.value.trim()===""||a<0||a>360){if(result)result.textContent="--";if(note)note.textContent="Masukkan A berupa azimut Matahari antara 0° dan 360°.";return;}
-  let expression, raw;
-  if(dec==="north"){expression="360° − A";raw=360-a;}
-  else if(time==="morning"){expression="180° + A";raw=180+a;}
-  else {expression="180° − A";raw=180-a;}
-  const out=norm360(raw);
-  if(formula)formula.textContent=expression;
-  if(result)result.textContent=formatDMS(out)+` (${out.toFixed(3)}°)`;
-  if(note)note.textContent=`A = ${a.toFixed(3)}°. Substitusi: ${expression.replace("A",`(${a.toFixed(3)}°)`)} = ${raw.toFixed(3)}°; setelah normalisasi, utara sejati = ${out.toFixed(3)}°. Pastikan tanda deklinasi dan waktu pengamatan sesuai referensi metode yang digunakan.`;
 }
 function getObservationRecords(){
   try{const parsed=JSON.parse(localStorage.getItem("panritaFalakObservations")||"[]");return Array.isArray(parsed)?parsed:[]}catch{return []}
@@ -1270,4 +1295,26 @@ document.addEventListener("DOMContentLoaded",()=>{
   const alertCheck=document.getElementById("prayerAlertsEnabled");if(alertCheck)alertCheck.checked=alertsOn;
   if(alertsOn && "Notification" in window && Notification.permission==="granted"){prayerAlarmTimer=setInterval(checkPrayerAlarm,15000);checkPrayerAlarm();prayerAlertStatus("Pengingat aktif selama aplikasi berjalan.");}
 });
+})();
+
+/* ===== Ayat sampul: berganti setiap aplikasi dibuka ===== */
+(function(){
+  const ayat=[
+    ["“Maka hadapkanlah wajahmu ke arah Masjidil Haram...”","QS. Al-Baqarah: 144"],
+    ["“Milik Allah timur dan barat. Ke mana pun kamu menghadap, di sanalah wajah Allah...”","QS. Al-Baqarah: 115"],
+    ["“Dialah yang menjadikan matahari bersinar dan bulan bercahaya, dan menetapkan tempat-tempat orbitnya, agar kamu mengetahui bilangan tahun dan perhitungan (waktu).”","QS. Yunus: 5"],
+    ["“Matahari dan bulan (beredar) sesuai perhitungan.”","QS. Ar-Rahman: 5"],
+    ["“Mereka bertanya kepadamu tentang bulan sabit. Katakanlah, ‘Itu adalah (penunjuk) waktu bagi manusia dan (ibadah) haji.’”","QS. Al-Baqarah: 189"],
+    ["“Sesungguhnya salat itu adalah kewajiban yang waktunya telah ditentukan atas orang-orang mukmin.”","QS. An-Nisa’: 103"],
+    ["“Laksanakanlah salat sejak matahari tergelincir sampai gelapnya malam...”","QS. Al-Isra’: 78"],
+    ["“Dialah yang menjadikan bintang-bintang bagimu, agar kamu menjadikannya petunjuk dalam kegelapan di darat dan di laut.”","QS. Al-An‘am: 97"],
+    ["“Tidaklah mungkin bagi matahari mengejar bulan, dan malam pun tidak dapat mendahului siang. Masing-masing beredar pada garis edarnya.”","QS. Yasin: 40"]
+  ];
+  let last=-1;
+  try{const v=parseInt(localStorage.getItem("panritaFalakLastAyat"),10);if(Number.isInteger(v))last=v;}catch(e){}
+  let i=Math.floor(Math.random()*ayat.length);
+  if(ayat.length>1&&i===last)i=(i+1+Math.floor(Math.random()*(ayat.length-1)))%ayat.length;
+  try{localStorage.setItem("panritaFalakLastAyat",String(i));}catch(e){}
+  const t=document.getElementById("splashAyahText"),r=document.getElementById("splashAyahRef");
+  if(t&&r){t.textContent=ayat[i][0];r.textContent=ayat[i][1];}
 })();

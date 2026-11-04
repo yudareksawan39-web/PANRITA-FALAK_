@@ -1,0 +1,14 @@
+PANRITA FALAK - CATATAN PENGGABUNGAN
+
+1. Dasar proyek: SIMPANAN_LOKASI_PETA_DIREVISI (peta ketuk-lokasi dan nama wilayah GPS dipertahankan). Modul Hisab & Rukyat Hilal sudah dihapus.
+2. Halaman Teodolit Falak diganti dengan versi PanritaFalak_Kalender_Malam_Diperbaiki:
+   - Simulasi Matahari & sudut astronomis
+   - Penentuan utara sejati dari azimut Matahari
+   - Azimut kiblat dalam derajat-menit-detik (DMS) di halaman Teodolit
+   - Pratinjau kamera HP di halaman Teodolit dihapus (sesuai versi file ke-2)
+3. Kartu "Simulasi Posisi Matahari" di halaman Posisi Matahari dipindah ke halaman Teodolit
+   (ID elemen yang sama tidak boleh ada dua kali di satu halaman).
+4. Sampul: ayat di bawah judul kini berganti acak setiap aplikasi dibuka (9 ayat, tidak sama dua kali berturut-turut).
+   Daftar ayat ada di akhir script.js (blok "Ayat sampul"); mudah ditambah/diubah.
+5. Halaman Beranda, Kiblat, dan Peta tetap menampilkan kiblat dalam desimal seperti file pertama.
+Belum diuji langsung di HP: uji di perangkat sebelum dipakai.
