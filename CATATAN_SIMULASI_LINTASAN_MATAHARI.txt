@@ -1,0 +1,36 @@
+PANRITA FALAK — UTARA SEJATI & SIMULASI LINTASAN MATAHARI
+
+1. UTARA SEJATI (script.js, calculateTrueNorth)
+   - Pengukuran PAGI memakai Utara Sejati = 360° − A, baik deklinasi Utara maupun Selatan.
+     Rumus 180° − A tidak dipakai untuk pagi.
+   - Kondisi sore tidak diubah (sore + Selatan masih 180° − A seperti semula; belum diminta).
+   - Hasil dibulatkan ke detik busur sebelum ditampilkan, sehingga tidak pernah muncul
+     "360° 00′ 00″" atau "60″".
+
+2. SIMULASI LINTASAN MATAHARI (menu Posisi Matahari, kartu "Lintasan Matahari Hari Ini")
+   - Grafik azimut (sumbu mendatar, Timur di kiri, Barat di kanan) terhadap ketinggian (sumbu tegak).
+   - Garis lengkung lintasan, garis horizon 0°, penanda Terbit / Kulminasi / Terbenam,
+     objek Matahari yang bergerak, label azimut & ketinggian dalam derajat.
+   - Slider waktu 00:00–24:00 (resolusi 1 detik), tombol Play / Pause / Reset, pilihan kecepatan.
+   - Pilihan tanggal dan zona waktu. Awal & Reset = tanggal/jam sekarang pada zona waktu pengaturan aplikasi.
+   - Mengikuti lokasi aktif aplikasi (GPS, peta, atau manual); lintasan digambar ulang saat lokasi berubah.
+   - Semua angka berasal dari solarPosition() yang sudah ada di aplikasi (deklinasi, Equation of Time,
+     waktu Matahari sejati, sudut waktu, azimut, ketinggian). Tidak ada angka statis.
+   - Terbit/terbenam = ketinggian geometris 0° (sama dengan garis horizon). Hisab salat memakai kriteria
+     −0°50′ sehingga bisa berbeda beberapa menit. Model tanpa refraksi atmosfer.
+   - Kartu "Simulasi Matahari & Sudut Astronomis" di halaman Teodolit Falak TIDAK diubah.
+
+3. PEMULIHAN (di luar permintaan, tetapi wajib)
+   - Fungsi renderPrayer() dipanggil di 6 tempat namun tidak ada definisinya di ZIP yang dikirim, sehingga
+     saat halaman dimuat muncul galat "renderPrayer is not defined" dan inisialisasi berhenti (Teodolit,
+     Simulasi, Peta, bahasa tidak ikut dijalankan). Saya menambahkan renderPrayer() yang hanya menampilkan
+     hasil prayerTimes() yang sudah ada, plus gaya dasar .prayer-grid/.prayer-item di style.css.
+     Tidak ada rumus salat yang diubah. Jika Anda punya versi asli, ganti blok bertanda "PEMULIHAN".
+
+4. PENGUJIAN (folder tests/)
+   - node tests/test-astronomi.js   : silang-uji solarPosition() dengan algoritma independen (Meeus + waktu
+     sideris) pada 2016 titik, nilai fisik (deklinasi titik balik, Equation of Time, kulminasi = 90° − |φ − δ|),
+     format DMS, dan rumus Utara Sejati pagi.
+   - python3 tests/uji-browser.py   : uji di Chromium (Playwright): slider, Play/Pause/Reset, tanggal, zona
+     waktu, lokasi, Utara Sejati, semua halaman lama, galat konsol.
+   Belum diuji di perangkat Android sungguhan.

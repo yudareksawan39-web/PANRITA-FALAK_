@@ -294,6 +294,7 @@ function navigate(page){
   $("#sidebar").classList.remove("open");
   if(page==="map"){initEmbeddedMap();setTimeout(()=>{state.map?.invalidateSize?.();initPanritaMapGlobe();updateMapGlobeLocation();},180)}
   if(page==="theodolite") updateTeodolite();
+  if(page==="sun") spOnShow();
   if(page==="monthly") renderMonthly();
   if(page==="prayer") renderPrayer();
   if(page==="calc") renderFormula("qibla");
@@ -318,6 +319,7 @@ function updateAll(){
   updateMapGlobeLocation();
   updateMapIfReady();
   renderMapInfo();
+  spRefresh();
 }
 function nextPrayerData(date){
   const t=prayerTimes(date);
@@ -803,11 +805,14 @@ function calculateTrueNorth(){
   const a=Number($("#trueNorthSunAz")?.value), time=$("#trueNorthTime")?.value||"morning", dec=$("#trueNorthDeclination")?.value||"north";
   const formula=$("#trueNorthFormula"), result=$("#trueNorthResult"), note=$("#trueNorthNote");
   if(!Number.isFinite(a)||$("#trueNorthSunAz")?.value.trim()===""||a<0||a>360){if(result)result.textContent="--";if(note)note.textContent="Masukkan A berupa azimut Matahari antara 0° dan 360°.";return;}
+  // Aturan rumus (diminta pengguna): pengukuran PAGI -> 360° − A, baik deklinasi Utara maupun Selatan.
+  // 180° − A TIDAK dipakai untuk pagi. Kondisi sore dibiarkan seperti semula.
   let expression, raw;
-  if(dec==="north"){expression="360° − A";raw=360-a;}
-  else if(time==="morning"){expression="180° + A";raw=180+a;}
+  if(time==="morning"){expression="360° − A";raw=360-a;}
+  else if(dec==="north"){expression="360° − A";raw=360-a;}
   else {expression="180° − A";raw=180-a;}
-  const out=norm360(raw);
+  // Bulatkan ke detik busur lebih dulu agar tampilan tidak pernah menjadi "360° 00′ 00″" atau "59,9″ → 60″".
+  const out=norm360(Math.round(norm360(raw)*3600)/3600);
   if(formula)formula.textContent=expression;
   if(result)result.textContent=formatDMS(out)+` (${out.toFixed(3)}°)`;
   if(note)note.textContent=`A = ${a.toFixed(3)}°. Substitusi: ${expression.replace("A",`(${a.toFixed(3)}°)`)} = ${raw.toFixed(3)}°; setelah normalisasi, utara sejati = ${out.toFixed(3)}°. Pastikan tanda deklinasi dan waktu pengamatan sesuai referensi metode yang digunakan.`;
@@ -924,6 +929,25 @@ function renderMonthly(){
     html+=`<tr class="${isToday?"today":""}"><td>${day} ${new Intl.DateTimeFormat("id-ID",{weekday:"short"}).format(d)}</td><td>${formatTime(t.fajr)}</td><td>${formatTime(t.sunrise)}</td><td>${formatTime(t.zuhur)}</td><td>${formatTime(t.asr)}</td><td>${formatTime(t.maghrib)}</td><td>${formatTime(t.isha)}</td></tr>`;
   }
   $("#monthlyBody").innerHTML=html;
+}
+/* PEMULIHAN: renderPrayer() dipanggil di 6 tempat tetapi definisinya hilang dari ZIP ini, sehingga
+   inisialisasi aplikasi berhenti dengan galat "renderPrayer is not defined" (Teodolit, Simulasi, Peta,
+   dan bahasa tidak ikut diinisialisasi). Fungsi ini hanya MENAMPILKAN hasil prayerTimes() yang sudah ada;
+   tidak ada rumus salat yang diubah. Bila Anda punya versi renderPrayer asli, ganti blok ini dengannya. */
+function renderPrayer(){
+  const grid=$("#prayerGrid");if(!grid)return;
+  const d=state.selectedDate,zone=Number(state.settings.timezone);
+  const t=prayerTimes(d),method=effectivePrayerMethod(),ang=effectivePrayerAngles();
+  const names={kemenag:"Kemenag RI",mw:"Muslim World League",umm:"Umm al-Qura (Makkah)",egypt:"Egyptian General Authority",karachi:"University of Islamic Sciences, Karachi",isna:"ISNA"};
+  const put=(id,v)=>{const e=$("#"+id);if(e)e.textContent=v;};
+  put("selectedDate",formatDate(d));
+  put("prayerDateLabel",formatDate(d,{dateStyle:"full"}));
+  put("prayerMethodLabel",(names[method]||method)+(method==="umm"?" · Isya 90 menit setelah Maghrib":` · Subuh ${ang.fajr}° / Isya ${ang.isha}°`));
+  put("prayerZoneLabel",`${deviceTimezoneName(zone)} (UTC${zone>=0?"+":""}${zone})`);
+  const isToday=d.toDateString()===new Date().toDateString();
+  const next=isToday?nextPrayerData(new Date()).name:null;
+  const rows=[["Subuh",t.fajr],["Terbit",t.sunrise],["Zuhur",t.zuhur],["Asar",t.asr],["Maghrib",t.maghrib],["Isya",t.isha]];
+  grid.innerHTML=rows.map(([n,h])=>`<div class="prayer-item card${n===next?" next":""}"><span>${n}</span><b>${formatTime(h)}</b></div>`).join("");
 }
 function rashdulForDate(d){
   const q=qiblaBearing(state.location.lat,state.location.lon);let best=null;
@@ -1537,6 +1561,219 @@ function bind(){
   $('#prayerAlertsEnabled')?.addEventListener("change",e=>e.target.checked?enablePrayerAlerts():disablePrayerAlerts());
 }
 
+/* ===== Simulasi Lintasan Matahari (menu Posisi Matahari → Simulasi) =====
+   Semua angka dihitung ulang oleh solarPosition() (model NOAA/Meeus yang sudah dipakai aplikasi)
+   dari: lintang & bujur lokasi aktif, tanggal pengamatan, jam lokal (slider), dan zona waktu.
+   Tidak ada angka statis. Rantai hitung: JD → bujur ekliptika → deklinasi (δ) → Equation of Time
+   → waktu Matahari sejati (TST) → sudut waktu (H) → azimut (A) dan ketinggian (h). */
+const SP={playing:false,raf:0,lastTs:0,secs:43200,y:2026,mo:1,d:1,zone:8,zoneManual:false,speed:3600,
+  key:"",cache:null,ready:false,textAt:0,textTimer:0};
+const SP_G={W:360,H:270,x0:34,x1:346,cx:190,top:16,bot:228,altMin:-25,altMax:90,uMax:135};
+const SP_CARD={0:"U",45:"TL",90:"T",135:"TG",180:"S",225:"BD",270:"B",315:"BL"};
+function spPos(y,mo,d,zone,secs,lat,lon){
+  const inst=new Date(Date.UTC(y,mo-1,d)+secs*1000-zone*3600000);
+  return solarPosition(inst,lat,lon,zone,secs/60);
+}
+function spNowInZone(zone){
+  const t=new Date(Date.now()+zone*3600000);
+  return {y:t.getUTCFullYear(),mo:t.getUTCMonth()+1,d:t.getUTCDate(),secs:t.getUTCHours()*3600+t.getUTCMinutes()*60+t.getUTCSeconds()};
+}
+function spHMS(secs,withSec=true){
+  let t=Math.round(((secs%86400)+86400)%86400);
+  const h=Math.floor(t/3600),m=Math.floor((t%3600)/60),s=t%60;
+  const p=n=>String(n).padStart(2,"0");
+  return withSec?`${p(h)}:${p(m)}:${p(s)}`:`${p(h)}:${p(m)}`;
+}
+function spDMS(v,signed=false){ // aman dari "360° 00′ 00″" dan "60″"
+  if(!Number.isFinite(v))return "--";
+  if(signed)return formatDMS(v,true);
+  return formatDMS((Math.round(norm360(v)*3600)%1296000)/3600);
+}
+function spU(az,ctr){ // posisi horizontal: Timur selalu di kiri, Barat di kanan
+  return ctr==="S"?az-180:-(((az+180)%360+360)%360-180);
+}
+function spX(u){const G=SP_G;return G.cx+clamp(u,-G.uMax-10,G.uMax+10)*((G.x1-G.x0)/(2*G.uMax));}
+function spY(alt){const G=SP_G;return G.top+(G.altMax-clamp(alt,G.altMin,G.altMax))/(G.altMax-G.altMin)*(G.bot-G.top);}
+function spBuild(y,mo,d,zone,lat,lon){
+  const key=[y,mo,d,zone,lat.toFixed(6),lon.toFixed(6)].join("|");
+  if(SP.key===key&&SP.cache)return SP.cache;
+  const N=1440,samples=[];
+  for(let i=0;i<=N;i++){const s=i*60,sp=spPos(y,mo,d,zone,s,lat,lon);samples.push({s,az:sp.azimuth,alt:sp.altitude});}
+  const refine=(s0,s1,rising)=>{let a=s0,b=s1;for(let k=0;k<40;k++){const m=(a+b)/2,h=spPos(y,mo,d,zone,m,lat,lon).altitude;if((h>=0)===rising)b=m;else a=m;}return (a+b)/2;};
+  let rise=null,set=null;
+  for(let i=1;i<=N;i++){
+    if(rise===null&&samples[i-1].alt<0&&samples[i].alt>=0)rise=refine(samples[i-1].s,samples[i].s,true);
+    if(set===null&&samples[i-1].alt>=0&&samples[i].alt<0)set=refine(samples[i-1].s,samples[i].s,false);
+  }
+  // Kulminasi (transit atas): TST = 12:00 → jam lokal = 720 − E − 4·bujur + 60·zona (menit); iterasi karena E ikut berubah.
+  let t=43200;
+  for(let k=0;k<5;k++){const sp=spPos(y,mo,d,zone,t,lat,lon);t=43200-(sp.eqTime+4*lon-60*zone)*60;}
+  const transit=((t%86400)+86400)%86400;
+  const spT=spPos(y,mo,d,zone,transit,lat,lon);
+  const spR=rise===null?null:spPos(y,mo,d,zone,rise,lat,lon);
+  const spS=set===null?null:spPos(y,mo,d,zone,set,lat,lon);
+  const ctr=(spT.azimuth>=90&&spT.azimuth<=270)?"S":"N";
+  const path=samples.map(p=>({s:p.s,az:p.az,alt:p.alt}));
+  if(rise!==null)path.push({s:rise,az:spR.azimuth,alt:0});
+  if(set!==null)path.push({s:set,az:spS.azimuth,alt:0});
+  path.sort((a,b)=>a.s-b.s);
+  SP.key=key;
+  SP.cache={rise,set,transit,spT,spR,spS,ctr,path,
+    allDayUp:rise===null&&set===null&&samples[0].alt>=0,
+    allDayDown:rise===null&&set===null&&samples[0].alt<0};
+  return SP.cache;
+}
+function spEl(id){return document.getElementById(id);}
+function spSetText(id,v){const e=spEl(id);if(e&&e.textContent!==v)e.textContent=v;}
+function spStaticSvg(c){
+  const G=SP_G,hy=spY(0);
+  const segs=[];let cur=[],prevX=null;
+  c.path.forEach(p=>{
+    if(p.alt<0){if(cur.length)segs.push(cur);cur=[];prevX=null;return;}
+    const x=spX(spU(p.az,c.ctr));
+    if(prevX!==null&&Math.abs(x-prevX)>150){segs.push(cur);cur=[];}
+    cur.push(x.toFixed(1)+" "+spY(p.alt).toFixed(1));prevX=x;
+  });
+  if(cur.length)segs.push(cur);
+  const dPath=segs.filter(s=>s.length>1).map(s=>"M"+s.join(" L")).join(" ");
+  let ticks="";
+  [-135,-90,-45,0,45,90,135].forEach(u=>{
+    const az=c.ctr==="S"?180+u:norm360(-u),x=spX(u),name=SP_CARD[Math.round(az/45)%8*45]||"";
+    ticks+=`<line x1="${x}" y1="${hy}" x2="${x}" y2="${G.bot}" class="sp-vgrid"/>`
+      +`<text x="${x}" y="${G.bot+15}" text-anchor="middle" class="sp-tick-name">${name}</text>`
+      +`<text x="${x}" y="${G.bot+28}" text-anchor="middle" class="sp-tick-deg">${Math.round(az)}°</text>`;
+  });
+  let grid="";
+  [30,60,90].forEach(a=>{const y=spY(a);grid+=`<line x1="${G.x0}" y1="${y}" x2="${G.x1}" y2="${y}" class="sp-hgrid"/><text x="${G.x0-5}" y="${y+3.5}" text-anchor="end" class="sp-axis">${a}°</text>`;});
+  const anchorFor=x=>x<70?"start":x>G.x1-40?"end":"middle";
+  const label=(x,y,l1,l2,cls)=>{const a=anchorFor(x);return `<text x="${x}" y="${y}" text-anchor="${a}" class="sp-ev ${cls}">${l1}</text><text x="${x}" y="${y+12}" text-anchor="${a}" class="sp-ev-sub ${cls}">${l2}</text>`;};
+  let ev="";
+  if(c.rise!==null){const x=spX(spU(c.spR.azimuth,c.ctr));ev+=`<circle cx="${x}" cy="${hy}" r="5" class="sp-pt-rise"/>`+label(x,hy+18,"Terbit",`${spHMS(c.rise,false)} · ${c.spR.azimuth.toFixed(1)}°`,"sp-ev-rise");}
+  if(c.set!==null){const x=spX(spU(c.spS.azimuth,c.ctr));ev+=`<circle cx="${x}" cy="${hy}" r="5" class="sp-pt-rise"/>`+label(x,hy+18,"Terbenam",`${spHMS(c.set,false)} · ${c.spS.azimuth.toFixed(1)}°`,"sp-ev-rise");}
+  {const x=spX(spU(c.spT.azimuth,c.ctr)),y=spY(c.spT.altitude),yy=y<34?y+20:y-16;
+   ev+=`<path d="M${x} ${y-6} L${x+6} ${y} L${x} ${y+6} L${x-6} ${y} Z" class="sp-pt-transit"/>`+label(x,yy,"Kulminasi",`${spHMS(c.transit,false)} · ${c.spT.altitude.toFixed(1)}°`,"sp-ev-transit");}
+  return `<defs>
+    <linearGradient id="spSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d2a63"/><stop offset="1" stop-color="#050c1f"/></linearGradient>
+    <linearGradient id="spGround" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#03070f"/><stop offset="1" stop-color="#000"/></linearGradient>
+    <radialGradient id="spGlowG"><stop offset="0" stop-color="#ffd36e" stop-opacity=".75"/><stop offset="1" stop-color="#ffd36e" stop-opacity="0"/></radialGradient>
+    <clipPath id="spClip"><rect x="${G.x0}" y="${G.top}" width="${G.x1-G.x0}" height="${G.bot-G.top}"/></clipPath>
+  </defs>
+  <rect x="${G.x0}" y="${G.top}" width="${G.x1-G.x0}" height="${hy-G.top}" fill="url(#spSky)"/>
+  <rect x="${G.x0}" y="${hy}" width="${G.x1-G.x0}" height="${G.bot-hy}" fill="url(#spGround)"/>
+  ${grid}${ticks}
+  <line x1="${G.x0}" y1="${hy}" x2="${G.x1}" y2="${hy}" class="sp-horizon"/>
+  <text x="${G.x0-5}" y="${hy+3.5}" text-anchor="end" class="sp-axis sp-axis-gold">0°</text>
+  <text x="${G.x1-4}" y="${hy-5}" text-anchor="end" class="sp-horizon-label">Horizon 0°</text>
+  <g clip-path="url(#spClip)"><path d="${dPath}" class="sp-path" fill="none"/></g>
+  ${ev}
+  <g id="spMarker">
+    <line id="spDropV" class="sp-drop" x1="0" y1="0" x2="0" y2="0"/>
+    <line id="spDropH" class="sp-drop" x1="0" y1="0" x2="0" y2="0"/>
+    <circle id="spGlow" r="22" fill="url(#spGlowG)"/>
+    <circle id="spSun" r="8.5" class="sp-sun"/>
+    <g id="spTag"><rect id="spTagBg" width="82" height="30" rx="8" class="sp-tag-bg"/>
+      <text id="spTagAz" class="sp-tag-text" x="8" y="13"></text><text id="spTagAlt" class="sp-tag-text sp-tag-alt" x="8" y="25"></text></g>
+  </g>`;
+}
+function spZoneLabel(z){return `${deviceTimezoneName(z)} (UTC${z>=0?"+":""}${z})`;}
+function spEnsureZoneOption(z){
+  const sel=spEl("spZone");if(!sel)return;
+  if(![...sel.options].some(o=>Number(o.value)===z)){const o=document.createElement("option");o.value=String(z);o.textContent=spZoneLabel(z);sel.appendChild(o);}
+  sel.value=String(z);
+}
+function spDateStr(){const p=n=>String(n).padStart(2,"0");return `${SP.y}-${p(SP.mo)}-${p(SP.d)}`;}
+function spRebuild(){ // dipanggil bila tanggal / zona / lokasi berubah
+  const svg=spEl("spSvg");if(!svg)return;
+  const lat=state.location.lat,lon=state.location.lon;
+  const c=spBuild(SP.y,SP.mo,SP.d,SP.zone,lat,lon);
+  svg.innerHTML=spStaticSvg(c);
+  const fmtLat=`${Math.abs(lat).toFixed(4)}° ${lat<0?"LS":"LU"}`,fmtLon=`${Math.abs(lon).toFixed(4)}° ${lon<0?"BB":"BT"}`;
+  spSetText("spLoc",`${state.location.name||"Lokasi"} · ${fmtLat}, ${fmtLon}`);
+  spSetText("spTz",spZoneLabel(SP.zone));
+  spSetText("spEvRise",c.rise===null?(c.allDayUp?"Tidak terbenam pada tanggal ini":"Tidak terbit pada tanggal ini"):`${spHMS(c.rise)} · A ${spDMS(c.spR.azimuth)}`);
+  spSetText("spEvTransit",`${spHMS(c.transit)} · h ${spDMS(c.spT.altitude,true)}`);
+  spSetText("spEvSet",c.set===null?("Tidak terbenam pada tanggal ini"):`${spHMS(c.set)} · A ${spDMS(c.spS.azimuth)}`);
+  spMove(true);
+}
+function spMove(forceText){ // gerakkan Matahari + perbarui angka (angka dibatasi ±15×/dtk agar ringan)
+  const svg=spEl("spSvg");if(!svg||!SP.cache)return;
+  const lat=state.location.lat,lon=state.location.lon,G=SP_G;
+  const sp=spPos(SP.y,SP.mo,SP.d,SP.zone,SP.secs,lat,lon);
+  const c=SP.cache,x=spX(spU(sp.azimuth,c.ctr)),y=spY(sp.altitude),hy=spY(0),up=sp.altitude>=0;
+  const set=(id,a)=>{const e=spEl(id);if(e)for(const k in a)e.setAttribute(k,a[k]);};
+  set("spSun",{cx:x,cy:y,class:up?"sp-sun":"sp-sun sp-sun-down"});
+  set("spGlow",{cx:x,cy:y,opacity:up?1:.25});
+  set("spDropV",{x1:x,y1:y,x2:x,y2:hy});
+  set("spDropH",{x1:G.x0,y1:y,x2:x,y2:y});
+  const tx=x>G.x1-110?x-14-82:x+14,ty=clamp(y-15,G.top+2,G.bot-32);
+  set("spTag",{transform:`translate(${tx.toFixed(1)} ${ty.toFixed(1)})`});
+  const upd=()=>{
+    SP.textAt=performance.now();
+    spSetText("spTagAz",`Az ${sp.azimuth.toFixed(2)}°`);spSetText("spTagAlt",`Alt ${sp.altitude.toFixed(2)}°`);
+    spSetText("spClock",spHMS(SP.secs));
+    spSetText("spAz",spDMS(sp.azimuth));spSetText("spAzDec",`${sp.azimuth.toFixed(4)}° · ${cardinal(sp.azimuth)}`);
+    spSetText("spAlt",spDMS(sp.altitude,true));spSetText("spAltDec",`${sp.altitude.toFixed(4)}°`);
+    spSetText("spDecl",spDMS(sp.decl,true));spSetText("spDeclDec",`${sp.decl.toFixed(4)}°`);
+    spSetText("spHa",`${sp.ha.toFixed(4)}°`);spSetText("spHaTime",`TST ${spHMS(sp.tst*60)}`);
+    spSetText("spState",up?"Di atas horizon":(sp.altitude>-6?"Di bawah horizon (senja sipil)":"Di bawah horizon"));
+    spSetText("spFormula",`δ=${sp.decl.toFixed(4)}° · E=${sp.eqTime.toFixed(3)} mnt · TST=${(sp.tst).toFixed(3)} mnt · H=TST/4−180°=${sp.ha.toFixed(4)}° · sin h = sin φ sin δ + cos φ cos δ cos H`);
+    const sl=spEl("spSlider");if(sl&&Number(sl.value)!==Math.round(SP.secs))sl.value=String(Math.round(SP.secs));
+    sl&&sl.setAttribute("aria-valuetext",`${spHMS(SP.secs,false)}, azimut ${sp.azimuth.toFixed(1)} derajat, ketinggian ${sp.altitude.toFixed(1)} derajat`);
+  };
+  const now=performance.now();
+  if(forceText||now-SP.textAt>66){clearTimeout(SP.textTimer);upd();}
+  else{clearTimeout(SP.textTimer);SP.textTimer=setTimeout(upd,70);}
+  return sp;
+}
+function spPlayState(){
+  const p=spEl("spPlay"),q=spEl("spPause");
+  if(p)p.disabled=SP.playing;if(q)q.disabled=!SP.playing;
+}
+function spPause(){SP.playing=false;cancelAnimationFrame(SP.raf);spPlayState();spMove(true);}
+function spPlay(){
+  if(SP.playing)return;
+  if(SP.secs>=86398)SP.secs=0;
+  SP.playing=true;SP.lastTs=performance.now();spPlayState();
+  const tick=ts=>{
+    if(!SP.playing)return;
+    const dt=Math.min(0.1,Math.max(0,(ts-SP.lastTs)/1000));SP.lastTs=ts;
+    SP.secs+=dt*SP.speed;
+    if(SP.secs>=86399){SP.secs=86399;spMove(true);spPause();return;}
+    spMove();SP.raf=requestAnimationFrame(tick);
+  };
+  SP.raf=requestAnimationFrame(tick);
+}
+function spReset(){
+  spPause();
+  SP.zoneManual=false;SP.zone=Number.isFinite(Number(state.settings.timezone))?Number(state.settings.timezone):8;
+  const n=spNowInZone(SP.zone);SP.y=n.y;SP.mo=n.mo;SP.d=n.d;SP.secs=n.secs;
+  spEnsureZoneOption(SP.zone);
+  const di=spEl("spDate");if(di)di.value=spDateStr();
+  const sl=spEl("spSlider");if(sl)sl.value=String(Math.round(SP.secs));
+  spRebuild();
+}
+function spInit(){
+  if(!spEl("spSvg"))return;
+  const sl=spEl("spSlider"),di=spEl("spDate"),zs=spEl("spZone"),sp=spEl("spSpeed");
+  sl.addEventListener("input",()=>{const v=Number(sl.value);if(SP.playing)spPause();SP.secs=clamp(v,0,86399);spMove(true);});
+  di.addEventListener("input",()=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(di.value);if(!m)return;SP.y=+m[1];SP.mo=+m[2];SP.d=+m[3];spRebuild();});
+  zs.addEventListener("change",()=>{SP.zone=Number(zs.value);SP.zoneManual=true;spRebuild();});
+  sp.addEventListener("change",()=>{SP.speed=Number(sp.value);});
+  spEl("spPlay").addEventListener("click",spPlay);
+  spEl("spPause").addEventListener("click",spPause);
+  spEl("spReset").addEventListener("click",spReset);
+  SP.ready=true;spReset();
+}
+function spRefresh(){if(SP.ready)spRebuild();}
+function spOnShow(){
+  if(!SP.ready)return;
+  const z=Number(state.settings.timezone);
+  if(!SP.zoneManual&&Number.isFinite(z)&&z!==SP.zone){SP.zone=z;spEnsureZoneOption(z);}
+  spRebuild();
+}
+// Antarmuka uji (dipakai tests/test-astronomi.js dan konsol browser).
+window.PanritaSunPath={compute:spPos,events:spBuild,state:SP,formatTime:spHMS};
+
 document.addEventListener("DOMContentLoaded",()=>{
   bind();
   languageObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
@@ -1554,7 +1791,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   updateTeodolite();
   const simDate=$("#solarSimulationDate");if(simDate)simDate.value=localDateTimeValue();
   const simZone=$("#solarSimulationTimezone");if(simZone)simZone.value=String(state.settings.timezone);
-  renderObservationRecords();updateGoogleEarthLink();simulateSunPosition();initMapAstronomy();
+  renderObservationRecords();updateGoogleEarthLink();simulateSunPosition();initMapAstronomy();spInit();
   applyLanguage();
   const alertsOn=localStorage.getItem("falakPrayerAlerts")==="true";
   const alertCheck=document.getElementById("prayerAlertsEnabled");if(alertCheck)alertCheck.checked=alertsOn;

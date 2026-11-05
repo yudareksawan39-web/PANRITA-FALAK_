@@ -382,3 +382,113 @@ body.dark .bottom-nav{background:rgba(6,20,39,.97)!important;border-color:rgba(2
 .map-globe-card{margin:20px 0 24px;padding:clamp(15px,3vw,24px);overflow:hidden;border:1px solid rgba(100,177,226,.28);border-radius:22px;background:#020711;box-shadow:0 18px 42px rgba(0,0,0,.28)}
 .map-globe-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.map-globe-heading h3{margin:5px 0;color:#f5e7c5;font-size:clamp(19px,3vw,25px)}.map-globe-heading p{margin:0;color:#aebfd2;font-size:12px;line-height:1.5}.map-globe-stage{position:relative;display:grid;place-items:center;min-height:300px;width:100%;max-width:680px;margin:8px auto 0;background:radial-gradient(ellipse at center,#07172a 0%,#020711 68%)}.map-globe{width:100%;height:clamp(310px,70vw,520px);cursor:grab;touch-action:pan-y}.map-globe:active{cursor:grabbing}.map-globe canvas{display:block;max-width:100%}.map-globe-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;padding-top:12px;border-top:1px solid rgba(148,190,224,.16);color:#d5e2f1;font-size:11px}.map-globe .scene-container{background:#020711!important}
 @media(max-width:560px){.map-globe-card{padding:14px 10px}.map-globe-heading{gap:6px}.map-globe-heading p{max-width:235px}.map-globe-stage{min-height:270px}.map-globe{height: min(88vw,380px);min-height:270px}.map-globe-legend{font-size:10px;gap:8px}}
+
+
+/* Penyempurnaan panel simulasi Matahari Panrita Falak */
+#theodoliteSunSimulation{
+  position:relative;overflow:hidden;
+  border:1px solid rgba(196,157,83,.42);
+  background:linear-gradient(145deg,rgba(10,31,52,.98),rgba(5,17,31,.98));
+  box-shadow:0 14px 34px rgba(0,0,0,.16);
+}
+#theodoliteSunSimulation:before{
+  content:"";position:absolute;inset:0 0 auto;height:3px;
+  background:linear-gradient(90deg,#c99a45,#f4d58c,#4bb6bc);
+}
+#theodoliteSunSimulation h3{display:flex;align-items:center;gap:10px;font-size:clamp(18px,2.3vw,23px);letter-spacing:.01em}
+#theodoliteSunSimulation h3:before{content:"☼";display:grid;place-items:center;width:36px;height:36px;border-radius:12px;color:#f2c66d;background:rgba(219,171,82,.13);font-size:25px}
+#theodoliteSunSimulation>p.hint{max-width:850px;line-height:1.65}
+#theodoliteSunSimulation .theodolite-input-grid{
+  grid-template-columns:minmax(0,1.5fr) minmax(180px,.8fr);
+  padding:15px;border:1px solid rgba(112,157,190,.25);
+  border-radius:16px;background:rgba(4,16,29,.38);
+}
+#theodoliteSunSimulation .theodolite-input-grid label{font-weight:600;color:var(--text);font-size:13px}
+#theodoliteSunSimulation .theodolite-input-grid input,
+#theodoliteSunSimulation .theodolite-input-grid select{
+  min-height:48px;border-radius:12px;border:1px solid rgba(104,160,196,.55);
+  background:#0b2035;color:#f2f6fb;padding:11px 13px;outline:none;
+}
+#theodoliteSunSimulation .theodolite-input-grid input:focus,
+#theodoliteSunSimulation .theodolite-input-grid select:focus{border-color:#e3bd70;box-shadow:0 0 0 3px rgba(227,189,112,.14)}
+#theodoliteSunSimulation .theodolite-result-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
+#theodoliteSunSimulation .coordinate-value{
+  min-width:0;padding:16px 13px;border-radius:15px;
+  border:1px solid rgba(75,182,188,.38);
+  background:linear-gradient(160deg,rgba(15,49,73,.94),rgba(8,29,48,.94));
+}
+#theodoliteSunSimulation .coordinate-value small{display:block;min-height:30px;color:#b9ccdc;line-height:1.4}
+#theodoliteSunSimulation .coordinate-value b{display:block;margin-top:7px;color:#f2c66d;font-size:clamp(16px,2vw,21px);overflow-wrap:anywhere}
+#theodoliteSunSimulation #simSunState{color:#8bd5b2}
+#theodoliteSunSimulation #simSunNote{padding:12px 14px;border-radius:12px;background:rgba(73,130,156,.12);border:1px solid rgba(104,160,196,.22);line-height:1.55}
+#theodoliteSunSimulation #simSunDetails{margin-top:14px;padding:16px;border-radius:15px;background:rgba(2,12,23,.38);border:1px solid rgba(196,157,83,.22)}
+#theodoliteSunSimulation #simSunDetails h4{color:#e9c77f;margin-top:0}
+#theodoliteSunSimulation .button-row{gap:10px;flex-wrap:wrap}
+#theodoliteSunSimulation .button-row button{min-height:46px;border-radius:13px;padding:11px 18px}
+@media(max-width:800px){#theodoliteSunSimulation .theodolite-result-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){
+ #theodoliteSunSimulation{padding:14px}
+ #theodoliteSunSimulation .theodolite-input-grid{grid-template-columns:1fr;padding:12px}
+ #theodoliteSunSimulation .theodolite-result-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ #theodoliteSunSimulation .coordinate-value{padding:12px 10px}
+ #theodoliteSunSimulation .coordinate-value small{min-height:unset;font-size:11px}
+ #theodoliteSunSimulation .button-row button{flex:1 1 100%}
+}
+
+/* ===== Simulasi Lintasan Matahari (Posisi Matahari) ===== */
+.sunpath-card{margin-top:16px;padding:clamp(14px,2.4vw,24px);background:linear-gradient(180deg,#0a1f4d 0%,#06112b 55%,#020409 100%)!important;border:1px solid rgba(216,182,109,.34)!important;color:#f4f0e7}
+.sunpath-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.sunpath-head h3{margin:2px 0 0;font-family:'Playfair Display',Georgia,serif;color:#f4dfad;font-size:clamp(19px,2.6vw,25px)}
+.sunpath-head .eyebrow{color:#3fd0c9;letter-spacing:.14em;font-size:11px;font-weight:800}
+.sunpath-loc{font-size:12.5px;color:#9fe3df;text-align:right;max-width:100%;overflow-wrap:anywhere}
+.sunpath-inputs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}
+.sunpath-inputs label{display:grid;gap:6px;font-size:12.5px;color:#bac7d7}
+.sunpath-inputs input,.sunpath-inputs select{width:100%;min-height:44px;padding:9px 11px;font:inherit}
+.sunpath-stage{border-radius:16px;overflow:hidden;border:1px solid rgba(63,208,201,.28);background:#030814}
+.sunpath-stage svg{display:block;width:100%;height:auto;touch-action:manipulation}
+.sunpath-stage .sp-path{stroke:#3fd0c9;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.sunpath-stage .sp-horizon{stroke:#e8c46f;stroke-width:1.8}
+.sunpath-stage .sp-horizon-label{fill:#e8c46f;font-size:9.5px;font-weight:700}
+.sunpath-stage .sp-hgrid{stroke:rgba(159,227,223,.16);stroke-dasharray:3 4}
+.sunpath-stage .sp-vgrid{stroke:rgba(159,227,223,.10)}
+.sunpath-stage .sp-axis{fill:#8fa7c4;font-size:9px}
+.sunpath-stage .sp-axis-gold{fill:#e8c46f;font-weight:700}
+.sunpath-stage .sp-tick-name{fill:#e8c46f;font-size:10.5px;font-weight:800}
+.sunpath-stage .sp-tick-deg{fill:#9fb3cf;font-size:9px}
+.sunpath-stage .sp-sun{fill:#ffd36e;stroke:#fff3c4;stroke-width:1.6}
+.sunpath-stage .sp-sun-down{fill:#a8873f;stroke:#7d6530;opacity:.85}
+.sunpath-stage .sp-drop{stroke:rgba(255,211,110,.55);stroke-width:1;stroke-dasharray:3 3}
+.sunpath-stage .sp-tag-bg{fill:rgba(4,12,30,.86);stroke:rgba(232,196,111,.6)}
+.sunpath-stage .sp-tag-text{fill:#fff1c7;font-size:10px;font-weight:700}
+.sunpath-stage .sp-tag-alt{fill:#9fe3df}
+.sunpath-stage .sp-pt-rise{fill:#3fd0c9;stroke:#dffaf8;stroke-width:1.3}
+.sunpath-stage .sp-pt-transit{fill:#e8c46f;stroke:#fff3c4;stroke-width:1.2}
+.sunpath-stage .sp-ev{font-size:10px;font-weight:800}.sunpath-stage .sp-ev-sub{font-size:9px}
+.sunpath-stage .sp-ev-rise{fill:#8fe9e3}.sunpath-stage .sp-ev-transit{fill:#f4dfad}
+.sunpath-clockrow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:14px 2px 4px}
+.sunpath-clockrow b{font-size:clamp(28px,6vw,40px);letter-spacing:.04em;color:#f4dfad;font-variant-numeric:tabular-nums}
+.sunpath-clockrow span{color:#9fe3df;font-size:13px}
+.sunpath-slider{width:100%;height:34px;margin:2px 0;accent-color:#e8c46f;cursor:pointer;background:transparent!important;padding:0!important;border:0!important}
+.sunpath-scale{display:flex;justify-content:space-between;font-size:11px;color:#8fa7c4;margin:0 4px 10px}
+.sunpath-buttons{display:flex;gap:10px;flex-wrap:wrap}.sunpath-buttons button{flex:1 1 90px;min-height:46px}
+.sunpath-buttons button:disabled{opacity:.45;cursor:not-allowed}
+.sunpath-readout{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:16px}
+.sunpath-readout>div,.sunpath-events>div{background:rgba(255,255,255,.045);border:1px solid rgba(216,182,109,.22);border-radius:14px;padding:11px 12px;display:grid;gap:3px;min-width:0}
+.sunpath-readout small,.sunpath-events small{color:#9fb3cf;font-size:12px}
+.sunpath-readout b{color:#f4dfad;font-size:clamp(16px,2.4vw,21px);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.sunpath-readout span{color:#3fd0c9;font-size:12.5px;font-variant-numeric:tabular-nums}
+.sunpath-state{margin:12px 2px 0;color:#bac7d7;font-size:14px}.sunpath-state b{color:#f4dfad}
+.sunpath-events{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
+.sunpath-events b{color:#f4f0e7;font-size:13.5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.sunpath-detail{margin-top:12px;color:#bac7d7;font-size:13px}.sunpath-detail summary{cursor:pointer;color:#e8c46f;font-weight:700;min-height:36px;display:flex;align-items:center}
+.sunpath-detail p{line-height:1.6;overflow-wrap:anywhere}
+@media(max-width:760px){.sunpath-inputs{grid-template-columns:1fr 1fr}.sunpath-inputs label:first-child{grid-column:1/-1}.sunpath-readout{grid-template-columns:1fr 1fr}.sunpath-events{grid-template-columns:1fr}}
+@media(max-width:420px){.sunpath-loc{text-align:left}}
+
+/* Pemulihan tampilan kartu Waktu Salat (gaya dasar .prayer-grid / .prayer-item ikut hilang dari ZIP) */
+.method-summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:center;padding:16px;margin-bottom:14px}
+.method-summary span{color:var(--muted);font-size:13px}.method-summary b{color:var(--text)}
+.prayer-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.prayer-item{display:grid;gap:6px;padding:16px;text-align:center}
+.prayer-item span{color:var(--muted);font-size:13px}.prayer-item b{font-size:clamp(20px,2.4vw,26px);font-variant-numeric:tabular-nums}
+.prayer-item.next{outline:2px solid rgba(216,182,109,.55);background:#10283a}

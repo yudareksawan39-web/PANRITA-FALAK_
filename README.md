@@ -68,3 +68,7 @@ Katalog galeri merupakan katalog eksplorasi, bukan pernyataan bahwa seluruh moti
 
 ## Pencarian Google Images
 Tautan “Cari di Google Images” membuka hasil pencarian berdasarkan nama motif dan wilayah. Google Images adalah mesin pencari, bukan API foto langsung; foto hasil pencarian tidak otomatis boleh disalin atau ditanamkan. Pastikan judul foto dan sumbernya cocok dengan motif sebelum digunakan.
+
+
+## Pembaruan Utara Sejati & Simulasi Lintasan Matahari
+Lihat `CATATAN_SIMULASI_LINTASAN_MATAHARI.txt`. Uji otomatis: `node tests/test-astronomi.js` dan `python3 tests/uji-browser.py`.

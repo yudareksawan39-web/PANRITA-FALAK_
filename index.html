@@ -167,7 +167,7 @@
             <div class="page-heading"><div><span class="eyebrow">PENGUKURAN FALAK</span><h2>Teodolit Falak</h2><p>Simulasi Matahari, penentuan utara sejati, azimut kiblat DMS, sudut vertikal, jarak, dan hasil hitung.</p></div><div class="status-dot" id="theodoliteStatus">Siap digunakan</div></div>
             <div class="card theodolite-form-card" id="theodoliteSunSimulation">
               <h3>Simulasi Matahari & Sudut Astronomis</h3>
-              <p class="hint">Simulasi dihitung dari waktu, zona waktu, dan koordinat lokasi yang dipilih. Azimut diukur dari utara searah jarum jam; tinggi Matahari diukur dari horizon. Simulasi bukan pembacaan kamera atau pengganti instrumen terkalibrasi.</p>
+              <p class="hint">Atur tanggal, waktu, dan zona waktu untuk melihat posisi Matahari berdasarkan lokasi aplikasi yang sedang dipilih. Azimut dihitung dari utara sejati searah jarum jam, sedangkan ketinggian diukur dari horizon. Hasil ini merupakan simulasi astronomis, bukan pembacaan sensor.</p>
               <div class="theodolite-input-grid">
                 <label>Tanggal dan waktu lokal<input id="solarSimulationDate" type="datetime-local"></label>
                 <label>Zona waktu<select id="solarSimulationTimezone"><option value="7">WIB (UTC+7)</option><option value="8" selected>WITA (UTC+8)</option><option value="9">WIT (UTC+9)</option><option value="0">UTC</option></select></label>
@@ -337,6 +337,40 @@
             <div class="sun-location card"><span>⌖</span><div><b id="sunLocation">Kota Parepare, Sulawesi Selatan</b><small id="sunDate">--</small></div><button class="secondary-btn" data-action="open-location-settings">Ganti Lokasi</button><button class="text-btn" data-action="get-location">Gunakan Lokasi Saya</button></div>
             <div class="sun-visual card"><div class="sun-arc scene-day" id="sunScene"><div class="scene-stars" aria-hidden="true"></div><div class="scene-cloud scene-cloud-a" aria-hidden="true"></div><div class="scene-cloud scene-cloud-b" aria-hidden="true"></div><div class="sun-dot" id="sunDot" aria-label="Posisi Matahari">☀</div><div class="horizon"></div><div class="sun-building" aria-hidden="true">⌂</div><div class="sun-scene-caption"><b id="sunSceneLabel">Langit siang</b><span id="sunSceneDetail">Simulasi berdasarkan waktu dan lokasi</span></div></div></div>
             <div class="metric-grid"><div class="metric card"><small>Azimut Matahari</small><b id="sunAzimuth">--°</b><span id="sunDirection">--</span></div><div class="metric card"><small>Ketinggian Matahari</small><b id="sunAltitude">--°</b></div><div class="metric card"><small>Waktu Zawal</small><b id="sunZawal">--:--</b></div><div class="metric card"><small>Waktu Istiwā'</small><b id="sunTransit">--:--</b></div></div>
+            <div class="card sunpath-card" id="sunPathCard">
+              <div class="sunpath-head">
+                <div><span class="eyebrow">SIMULASI</span><h3>Lintasan Matahari Hari Ini</h3></div>
+                <div class="sunpath-loc" id="spLoc">--</div>
+              </div>
+              <div class="sunpath-inputs">
+                <label>Tanggal pengamatan<input id="spDate" type="date"></label>
+                <label>Zona waktu<select id="spZone"><option value="7">WIB (UTC+7)</option><option value="8">WITA (UTC+8)</option><option value="9">WIT (UTC+9)</option><option value="0">UTC</option></select></label>
+                <label>Kecepatan putar<select id="spSpeed"><option value="1800">Lambat</option><option value="3600" selected>Normal</option><option value="7200">Cepat</option></select></label>
+              </div>
+              <div class="sunpath-stage"><svg id="spSvg" viewBox="0 0 360 270" role="img" aria-label="Grafik lintasan Matahari dari Timur ke Barat: azimut pada sumbu mendatar, ketinggian pada sumbu tegak"></svg></div>
+              <div class="sunpath-clockrow"><b id="spClock">--:--:--</b><span id="spTz">--</span></div>
+              <input id="spSlider" class="sunpath-slider" type="range" min="0" max="86399" step="1" value="43200" aria-label="Waktu lokal (00:00 sampai 24:00)">
+              <div class="sunpath-scale" aria-hidden="true"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+              <div class="button-row sunpath-buttons">
+                <button class="primary-btn" id="spPlay" type="button">▶ Play</button>
+                <button class="secondary-btn" id="spPause" type="button" disabled>⏸ Pause</button>
+                <button class="secondary-btn" id="spReset" type="button">↺ Reset</button>
+              </div>
+              <div class="sunpath-readout">
+                <div><small>Azimut Matahari</small><b id="spAz">--</b><span id="spAzDec">--</span></div>
+                <div><small>Ketinggian (altitude)</small><b id="spAlt">--</b><span id="spAltDec">--</span></div>
+                <div><small>Deklinasi (δ)</small><b id="spDecl">--</b><span id="spDeclDec">--</span></div>
+                <div><small>Sudut waktu (H)</small><b id="spHa">--</b><span id="spHaTime">--</span></div>
+              </div>
+              <p class="sunpath-state"><span>Status:</span> <b id="spState">--</b></p>
+              <div class="sunpath-events">
+                <div><small>🌅 Terbit</small><b id="spEvRise">--</b></div>
+                <div><small>◆ Kulminasi</small><b id="spEvTransit">--</b></div>
+                <div><small>🌇 Terbenam</small><b id="spEvSet">--</b></div>
+              </div>
+              <details class="sunpath-detail"><summary>Rumus & nilai perhitungan saat ini</summary><p id="spFormula">--</p>
+                <p class="hint">Azimut dihitung dari Utara sejati searah jarum jam (Timur = 90°, Selatan = 180°, Barat = 270°). Terbit/terbenam ditandai saat ketinggian geometris = 0°; hisab salat memakai kriteria ketinggian yang berbeda sedikit (refraksi & jari-jari Matahari) sehingga waktunya bisa berselisih beberapa menit. Model tanpa refraksi atmosfer.</p></details>
+            </div>
           </section>
 
           <!-- Rashdul -->
