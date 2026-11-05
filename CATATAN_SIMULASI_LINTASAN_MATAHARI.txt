@@ -34,3 +34,19 @@ PANRITA FALAK — UTARA SEJATI & SIMULASI LINTASAN MATAHARI
    - python3 tests/uji-browser.py   : uji di Chromium (Playwright): slider, Play/Pause/Reset, tanggal, zona
      waktu, lokasi, Utara Sejati, semua halaman lama, galat konsol.
    Belum diuji di perangkat Android sungguhan.
+
+5. PENYESUAIAN KHUSUS TELEPON PINTAR (5 Nov 2026)
+   - Ditambahkan lapisan CSS mobile-first di akhir style.css tanpa mengubah struktur HTML,
+     fungsi JavaScript, rumus astronomi, atau fitur aplikasi yang sudah ada.
+   - Prioritas layar portrait Android 320–600 px; ukuran tombol sentuh minimal 46 px,
+     input minimal 46 px, dan font input 16 px untuk menghindari zoom otomatis browser.
+   - Header, logo, pemilih bahasa, navigasi bawah, kartu, grid, tabel, peta, dan formulir
+     disesuaikan agar tidak memicu scroll horizontal pada layar kecil.
+   - Panel simulasi lintasan Matahari diatur ulang: input dua kolom, tombol Play/Pause/Reset
+     tiga kolom, kartu hasil dua kolom, dan label tetap dapat membungkus tanpa keluar layar.
+   - Panel simulasi Matahari Teodolit dan tombol-tombolnya juga disesuaikan untuk sentuhan HP.
+   - Ditambahkan safe-area padding untuk perangkat dengan area kamera/notch dan penyesuaian
+     lanskap untuk layar HP yang pendek.
+   - Uji sintaks JavaScript dan 39 uji astronomi: lulus. Uji browser Playwright tidak dapat
+     dijalankan di lingkungan ini karena executable Chromium belum tersedia; pengujian
+     pada perangkat Android fisik tetap diperlukan sebelum rilis APK.
