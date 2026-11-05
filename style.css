@@ -616,3 +616,88 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .sunpath-stage svg{max-height:55vh}
   .theodolite-camera-frame{height:70vh;min-height:220px}
 }
+
+/* PANRITA FALAK — FIX GULIR LAYAR ANDROID
+   Pastikan dokumen tetap menjadi area scroll utama pada WebView/Chrome Android. */
+html{
+  height:auto !important;
+  min-height:100%;
+  overflow-x:hidden !important;
+  overflow-y:auto !important;
+  touch-action:pan-y;
+  -webkit-overflow-scrolling:touch;
+}
+body{
+  height:auto !important;
+  min-height:100%;
+  overflow-x:hidden !important;
+  overflow-y:visible !important;
+  position:relative;
+  touch-action:pan-y;
+  -webkit-overflow-scrolling:touch;
+}
+#mainShell{
+  height:auto !important;
+  min-height:100dvh;
+  overflow:visible !important;
+}
+.layout,.content,.page.active{
+  height:auto !important;
+  max-height:none !important;
+  overflow:visible !important;
+  touch-action:pan-y;
+}
+@media(max-width:800px){
+  .layout{min-height:calc(100dvh - 68px);height:auto !important;overflow:visible !important}
+  .content{padding-bottom:calc(90px + env(safe-area-inset-bottom)) !important;overflow:visible !important}
+  .bottom-nav{position:fixed;left:0;right:0;bottom:0;z-index:45}
+}
+
+
+/* ============================================================
+   PANRITA FALAK — FINAL SCROLL NORMALIZATION
+   Dokumen menjadi satu-satunya scroll utama; mendukung touchpad,
+   mouse wheel, dan swipe sentuh tanpa gesture khusus.
+   ============================================================ */
+html {
+  height: auto !important;
+  min-height: 100%;
+  overflow-x: clip !important;
+  overflow-y: auto !important;
+  overscroll-behavior: auto !important;
+  touch-action: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+body {
+  height: auto !important;
+  min-height: 100%;
+  max-height: none !important;
+  overflow-x: clip !important;
+  overflow-y: visible !important;
+  overscroll-behavior: auto !important;
+  touch-action: auto !important;
+  position: relative !important;
+}
+#mainShell, .layout, .content, .page, .page.active {
+  height: auto !important;
+  min-height: 0;
+  max-height: none !important;
+  overflow: visible !important;
+  overscroll-behavior: auto !important;
+  touch-action: auto !important;
+}
+#mainShell { min-height: 100vh; min-height: 100dvh; }
+.content { min-width: 0; }
+@media (max-width: 800px) {
+  html, body { overscroll-behavior-y: auto !important; }
+  .layout { min-height: calc(100vh - 68px); min-height: calc(100dvh - 68px); }
+  .content {
+    padding-bottom: calc(90px + env(safe-area-inset-bottom)) !important;
+    overflow: visible !important;
+  }
+}
+/* Area yang memang perlu digulir sendiri (misalnya tabel lebar/sidebar)
+   tetap dapat digulir tanpa mengunci halaman utama. */
+.table-wrap, .sidebar {
+  -webkit-overflow-scrolling: touch;
+}
